@@ -1,21 +1,26 @@
 defaults:
     - _self_
+    - environment
     - sac
     
-# this needs to be specified manually
+# Experiment level parameters
 experiment: THEMIS
+device: cpu
+num_seed_steps: 2e4 # Steps that the agent does random actions to fill the buffers 5e3 for continuous
+num_unsup_steps: 0 #5000
+num_train_steps: 5e6 #1e6 for continuous
+replay_buffer_capacity: 1e6
 
 # unsup training
 gradient_update: 1
-num_unsup_steps: 0 #5000
 topK: 5
 
 # reward learning
 learn_reward: True
 segment: 50
 activation: tanh
-num_seed_steps: 5000 # Steps that the agent does random actions to fill the buffers
 num_interact: 4000 # After how many steps we retrain the reward model
+reward_model_capacity: 10000 # How many feedbacks can it hold
 reward_lr: 0.003
 reward_batch: 50 # How many segments will be generated for human input
 reward_update: 200 # How many epochs the reward model is training for
@@ -36,50 +41,23 @@ teacher_eps_equal: 0    # Probability of considering both segments equally good
 # scheduling
 reward_schedule: 0
 
-num_train_steps: 1000000
-replay_buffer_capacity: 10000
-reward_model_capacity: 10000
-
 # evaluation config
 eval_frequency: 100 #10000
 num_eval_episodes: 10
-device: cpu
 
 # logger
 log_frequency: 10
 log_save_tb: true
 
-# video recorder
-save_video: true
+# video recorder (Use only in evaluation)
+save_video: false
 video_location: Null
-record_frequency: 10
+record_frequency: 1
 
 # setups
 seed: 1
 debug: False
-
-# Environment
-domain: Box2D
-env: LunarLander-v3
-render_mode: None
-#max_episode_steps: 100
-
-action_type: Null
-state_type: Null
-architecture: MLP
-mode: 0
-action_space: Null
-obs_space: Null
-action_dim: Null
-
-#Atari Settings (some for Box2D CarRacing)
-obs_type: rgb # [rgb, ram, greyscale]
-frame_stack: 4 # only works if obs_type=pixels
-frameskip: 4
-action_repeat: 1 # set to 2 for pixels
-noop_max: 30
-grayscale_obs: True
-scale_obs: False
+log_success: True
 
 #Xplain Params
 checkpoint_frec: 500 # No. of steps to 

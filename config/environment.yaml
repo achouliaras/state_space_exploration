@@ -1,0 +1,22 @@
+# Environment
+domain: Box2D
+env: LunarLander-v3
+render_mode: None
+#max_episode_steps: 100
+
+action_type: Null
+state_type: Null
+architecture: MLP
+mode: 0
+action_space: Null
+obs_space: Null
+action_dim: Null
+
+#Atari Settings (some for Box2D CarRacing)
+obs_type: rgb # [rgb, ram, greyscale]
+frame_stack: 4 # only works if obs_type=pixels
+frameskip: 4
+action_repeat: 1 # set to 2 for pixels
+noop_max: 30
+grayscale_obs: True
+scale_obs: False

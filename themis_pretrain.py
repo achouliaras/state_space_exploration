@@ -18,9 +18,9 @@ from collections import deque
 
 import lib.env_setup as env_setup
 import lib.agent_setup as agent_setup
+from lib.eval import evaluate_agent
 import hydra
 from omegaconf import DictConfig
-from gymnasium.spaces import utils as gym_utils
 
 class Workspace(object):
     def __init__(self, cfg, work_dir):
@@ -43,8 +43,8 @@ class Workspace(object):
         self.cfg = cfg
         
         actor_cfg, critic_cfg = agent_setup.config_agent(cfg)
-        self.log_success = True
 
+        self.agent, self.replay_buffer = agent_setup.create_agent(cfg, actor_cfg, critic_cfg, cfg.agent.action_cfg, self.obs_space)
         # for logging
         self.total_feedback = 0
         self.labeled_feedback = 0
@@ -68,7 +68,7 @@ class Workspace(object):
 
     def run(self):
         self.episode, episode_reward, terminated, truncated = 0, 0, True, False
-        if self.log_success:
+        if self.cfg.log_success:
             episode_success = 0
         true_episode_reward = 0
         
@@ -76,27 +76,45 @@ class Workspace(object):
         avg_train_true_return = deque([], maxlen=10) 
         total_time=0
         start_time = time.time()
+        obs, info = self.env.reset(seed = self.cfg.seed)
 
-        interact_count = 0
-        while self.step != (self.cfg.num_seed_steps + self.cfg.num_unsup_steps):
+        for global_step in range(self.cfg.num_seed_steps + self.cfg.num_unsup_steps):
+            # sample action for data collection
+            if global_step < self.cfg.num_seed_steps:
+                action = self.env.action_space.sample()
+            else:
+                #with utils.eval_mode(self.agent):
+                action, _, _ = self.agent.get_action(obs)
+                action = action.detach().cpu().numpy()[0]
+
+            next_obs, reward, terminated, truncated, info = self.env.step(action)
+            
+            # Push data to replay buffer
+            obs = next_obs
+
+            if global_step > self.cfg.num_seed_steps:
+                self.agent.update_state_ent(self.replay_buffer, self.logger, 
+                                            global_step, self.cfg.num_train_steps, 
+                                            gradient_update=1, K=self.cfg.topK)
+
             if terminated or truncated:
-                if self.step > 0:
+                if global_step > 0:
                     episode_time = time.time() - start_time
-                    self.logger.log('train/duration', episode_time, self.step)
+                    self.logger.log('train/duration', episode_time, global_step)
                     total_time += episode_time
-                    self.logger.log('train/total_duration', total_time, self.step)
+                    self.logger.log('train/total_duration', total_time, global_step)
                     start_time = time.time()
                     self.logger.dump(
-                        self.step, save=(self.step > self.cfg.num_seed_steps))
+                        global_step, save=(global_step > self.cfg.num_seed_steps))
                 
-                self.logger.log('train/episode_reward', episode_reward, self.step)
-                self.logger.log('train/true_episode_reward', true_episode_reward, self.step)
-                self.logger.log('train/total_feedback', self.total_feedback, self.step)
-                self.logger.log('train/labeled_feedback', self.labeled_feedback, self.step)
+                self.logger.log('train/episode_reward', episode_reward, global_step)
+                self.logger.log('train/true_episode_reward', true_episode_reward, global_step)
+                self.logger.log('train/total_feedback', self.total_feedback, global_step)
+                self.logger.log('train/labeled_feedback', self.labeled_feedback, global_step)
                 
-                if self.log_success:
-                    self.logger.log('train/episode_success', episode_success, self.step)
-                    self.logger.log('train/true_episode_success', episode_success, self.step)
+                if self.cfg.log_success:
+                    self.logger.log('train/episode_success', episode_success, global_step)
+                    self.logger.log('train/true_episode_success', episode_success, global_step)
                 
                 obs, info = self.env.reset(seed = self.cfg.seed)
 
@@ -109,54 +127,28 @@ class Workspace(object):
                 episode_reward = 0
                 avg_train_true_return.append(true_episode_reward)
                 true_episode_reward = 0
-                if self.log_success:
+                if self.cfg.log_success:
                     episode_success = 0
-                episode_step = 0
                 self.episode += 1
 
-                self.logger.log('train/episode', self.episode, self.step)
-
-            # # For Video generation
-            # if self.cfg.state_type == 'grid' or self.cfg.state_type == 'tabular':
-            #     env_snapshot = [] # Not yet supported
-            # elif self.cfg.state_type == 'pixel-grid':
-            #     env_snapshot = self.env.get_state() 
-            # elif self.cfg.state_type == 'pixels':
-            #     env_snapshot = self.env.get_state()
-            # else:
-            #     env_snapshot = [] # Not yet supported
-
-            action = self.env.action_space.sample()
-            next_obs, reward, terminated, truncated, info = self.env.step(action)
+                self.logger.log('train/episode', self.episode, global_step)
             
-            if self.cfg.action_type == 'Discrete':
-                next_obs = next_obs['image'] if self.cfg.state_type == 'grid' else next_obs
-                action = np.array([action], dtype=np.uint8)
-
-            # obs_flat = gym_utils.flatten(self.obs_space, obs)
-
-            # reward_hat = self.reward_model.r_hat(np.concatenate([obs_flat, action], axis=-1))
-
             # allow infinite bootstrap
             terminated = float(terminated)
             # episode_reward += reward_hat
             true_episode_reward += reward
             
-            if self.log_success:
+            if self.cfg.log_success:
                 episode_success = max(episode_success, terminated)
-
-            obs = next_obs
-            episode_step += 1
-            self.step += 1
-            interact_count += 1
+        self.logger.dump(global_step, save=(global_step > self.cfg.num_seed_steps))
         self.env.close()
+        evaluate_agent(self.agent, self.cfg, self.logger)
 
     def save_snapshot(self):
         snapshot_dir = self.cfg.snapshot_dir        
         snapshot_dir.mkdir(exist_ok=True, parents=True)
         self.agent.save(snapshot_dir, self.global_frame)
         self.replay_buffer.save(snapshot_dir, self.global_frame)
-        self.reward_model.save(snapshot_dir, self.global_frame)
         snapshot = snapshot_dir / f'snapshot_{self.global_frame}.pt'
         keys_to_save = ['step', 'episode']
         payload = {k: self.__dict__[k] for k in keys_to_save}

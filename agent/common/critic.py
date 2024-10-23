@@ -1,20 +1,17 @@
-import numpy as np
 import torch
-import torch.nn.functional as F
-import lib.utils as utils
-
+import agent.common.utils as utils
 from torch import nn
 
 class DoubleQCritic(nn.Module):
     """Critic network, employes double Q-learning."""
-    def __init__(self, obs_space, obs_dim, action_dim, action_type, policy, hidden_dim, hidden_depth, mode = 0):
+    def __init__(self, obs_space, obs_dim, action_dim, action_type, architecture, hidden_dim, hidden_depth, mode = 0):
         super().__init__()
-        self.policy = policy
+        self.architecture = architecture
         self.action_type = action_type
 
         # If obs is image-like use feature extraction
-        if self.policy =='CNN':
-            self.cnn, self.flatten = utils.cnn(obs_space, obs_dim[2], mode = mode)
+        if self.architecture =='CNN':
+            self.cnn, self.flatten = utils.cnn(obs_space, obs_dim[0], mode = mode)
             obs_dim = self.flatten
 
         if self.action_type == 'Cont':
@@ -29,9 +26,9 @@ class DoubleQCritic(nn.Module):
 
     def forward(self, obs, action):
         assert obs.size(0) == action.size(0)
-
-        if self.policy =='CNN':
-            obs = self.cnn(obs.permute(0, 3, 1, 2))
+        
+        if self.architecture =='CNN':
+            obs = self.cnn(obs.permute(0, 1, 2, 3))
         
         if self.action_type == 'Cont':
             input_data = torch.cat([obs, action], dim=-1)       # Add Action on continuous action spaces 
