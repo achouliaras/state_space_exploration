@@ -24,9 +24,7 @@ class DoubleQCritic(nn.Module):
         self.outputs = dict()
         #self.apply(utils.weight_init)
 
-    def forward(self, obs, action):
-        assert obs.size(0) == action.size(0)
-        
+    def forward(self, obs, action=None):
         if self.architecture =='CNN':
             obs = self.cnn(obs.permute(0, 1, 2, 3))
         

@@ -2,15 +2,14 @@ algorithm:
   name: sac
 
 agent:
-  _target_: agent.sac.SACAgent
-  obs_dim: Null # to be specified later
-  action_dim: Null # to be specified later
-  action_range: Null # to be specified later
-  device: ${device}
-  #critic_cfg: ${double_q_critic}
-  #actor_cfg: ${diag_gaussian_actor}  
-  #actor_cfg: ${categorical_actor} #for discrete environments
-  action_cfg: Null
+  #_target_: agent.sac.SACAgent
+  obs_dim: Null # to be specified on execution
+  action_dim: Null # to be specified on execution
+  action_range: Null # to be specified on execution
+  # device: ${device}
+  critic_cfg: Null # to be specified on execution
+  actor_cfg: Null # to be specified on execution
+  action_cfg: Null # to be specified on execution
   discount: 0.99
   init_temperature: 0.1
   critic_target_update_frequency: 8000 # steps
@@ -22,6 +21,7 @@ discrete_action:
   alpha_lr: 3e-4
   actor_lr: 3e-4
   critic_lr: 3e-3
+  critic_update_frequency: 4
   critic_target_update_frequency: 8000 # steps
   target_entropy_scale: 0.89
   critic_tau: 1 # target critic percentage change from critic
@@ -32,12 +32,13 @@ continuous_action:
   alpha_lr: 3e-3
   actor_lr: 3e-4
   critic_lr: 3e-3
+  critic_update_frequency: 1
   critic_target_update_frequency: 1 # steps
   target_entropy_scale: 1
   critic_tau: 0.005 # target critic percentage change from critic
 
 double_q_critic:
-  _target_: agent.critic.DoubleQCritic
+  #_target_: agent.critic.DoubleQCritic
   obs_dim: ${agent.obs_dim}
   action_dim: ${agent.action_dim}
   action_type: 'Discrete'
@@ -46,7 +47,7 @@ double_q_critic:
   hidden_depth: 1
     
 diag_gaussian_actor:
-  _target_: agent.actor.DiagGaussianActor
+  #_target_: agent.actor.DiagGaussianActor
   obs_dim: ${agent.obs_dim}
   action_dim: ${agent.action_dim}
   action_type: 'Continuous'
@@ -56,7 +57,7 @@ diag_gaussian_actor:
   log_std_bounds: [-5, 2]
 
 categorical_actor:
-  _target_: agent.actor.CategoricalActor
+  #_target_: agent.actor.CategoricalActor
   obs_dim: ${agent.obs_dim}
   action_dim: ${agent.action_dim}
   action_type: 'Discrete'

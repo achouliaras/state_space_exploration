@@ -53,7 +53,6 @@ class CategoricalActor(nn.Module):
         #self.apply(utils.weight_init)
 
     def forward(self, obs):
-        
         if self.architecture =='CNN':
             x = self.trunk(self.cnn(obs.permute(0, 1, 2, 3)))
         else:

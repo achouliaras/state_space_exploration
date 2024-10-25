@@ -34,6 +34,7 @@ class Workspace(object):
         self.logger = Logger(
             self.work_dir,
             save_tb=cfg.log_save_tb,
+            experiment_name=cfg.experiment + f'_{cfg.seed}',
             log_frequency=cfg.log_frequency,
             agent=cfg.algorithm.name)
 
@@ -82,14 +83,17 @@ class Workspace(object):
             # sample action for data collection
             if global_step < self.cfg.num_seed_steps:
                 action = self.env.action_space.sample()
+                if global_step == self.cfg.num_seed_steps-1: print('PRETRAINING STARTS')
             else:
                 #with utils.eval_mode(self.agent):
-                action, _, _ = self.agent.get_action(obs)
+                action, _, _ = self.agent.get_action(torch.FloatTensor(obs).to(self.device).unsqueeze(0))
                 action = action.detach().cpu().numpy()[0]
 
             next_obs, reward, terminated, truncated, info = self.env.step(action)
             
             # Push data to replay buffer
+            self.replay_buffer.add(obs, action, reward, next_obs, terminated, truncated)
+
             obs = next_obs
 
             if global_step > self.cfg.num_seed_steps:
@@ -142,9 +146,11 @@ class Workspace(object):
                 episode_success = max(episode_success, terminated)
         self.logger.dump(global_step, save=(global_step > self.cfg.num_seed_steps))
         self.env.close()
-        evaluate_agent(self.agent, self.cfg, self.logger)
+        print('PRETRAINING FINISHED')
+        self.logger = evaluate_agent(self.agent, self.cfg, self.logger)
 
     def save_snapshot(self):
+        print('SAVING STARTS')
         snapshot_dir = self.cfg.snapshot_dir        
         snapshot_dir.mkdir(exist_ok=True, parents=True)
         self.agent.save(snapshot_dir, self.global_frame)
@@ -153,6 +159,7 @@ class Workspace(object):
         keys_to_save = ['step', 'episode']
         payload = {k: self.__dict__[k] for k in keys_to_save}
         torch.save(payload, snapshot, pickle_protocol=4)
+        print('SAVING COMPLETE')
         
 @hydra.main(version_base=None, config_path="config", config_name='themis_pretrain')
 def main(cfg : DictConfig):
