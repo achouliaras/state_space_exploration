@@ -144,21 +144,21 @@ class SAC(Agent):
                       not_done, logger, step, print_flag=True):
         if self.action_type == 'Cont':
             with torch.no_grad():
-                next_action, log_prob, _ = self.get_action(torch.FloatTensor(next_obs).to(self.device))
-                target_Q1, target_Q2 = self.critic_target(torch.FloatTensor(next_obs).to(self.device), next_action)
+                next_action, log_prob, _ = self.get_action(torch.Tensor(next_obs).to(self.device))
+                target_Q1, target_Q2 = self.critic_target(torch.Tensor(next_obs).to(self.device), next_action)
                 target_V = torch.min(target_Q1, target_Q2) - self.alpha.detach() * log_prob
                 target_Q = reward.flatten() + (not_done.flatten() * self.discount * target_V)
                 target_Q = target_Q.detach()
-            current_Q1, current_Q2 = self.critic(torch.FloatTensor(obs).to(self.device), action)
+            current_Q1, current_Q2 = self.critic(torch.Tensor(obs).to(self.device), action)
         elif self.action_type == 'Discrete':
             with torch.no_grad():
-                _, log_prob, action_probs = self.get_action(torch.FloatTensor(next_obs).to(self.device))
-                target_Q1, target_Q2 = self.critic_target(torch.FloatTensor(next_obs).to(self.device))
+                _, log_prob, action_probs = self.get_action(torch.Tensor(next_obs).to(self.device))
+                target_Q1, target_Q2 = self.critic_target(torch.Tensor(next_obs).to(self.device))
                 target_V = action_probs * (torch.min(target_Q1, target_Q2) - self.alpha.detach() * log_prob)
                 target_V = target_V.sum(1).unsqueeze(-1)
                 target_Q = reward.flatten() + (not_done.flatten() * self.discount * target_V)
                 target_Q = target_Q.detach()
-            current_Q1, current_Q2 = self.critic(torch.FloatTensor(obs).to(self.device))
+            current_Q1, current_Q2 = self.critic(torch.Tensor(obs).to(self.device))
         # get current Q estimates
         current_Q1 = current_Q1.gather(1, action.long())
         current_Q2 = current_Q2.gather(1, action.long())
@@ -183,19 +183,19 @@ class SAC(Agent):
         
         if self.action_type == 'Cont':
             with torch.no_grad():
-                next_action, log_prob, _ = self.get_action(torch.FloatTensor(next_obs).to(self.device))
-                target_Q1, target_Q2 = self.critic_target(torch.FloatTensor(next_obs).to(self.device), next_action)
+                next_action, log_prob, _ = self.get_action(torch.Tensor(next_obs).to(self.device))
+                target_Q1, target_Q2 = self.critic_target(torch.Tensor(next_obs).to(self.device), next_action)
                 target_V = torch.min(target_Q1, target_Q2) - self.alpha.detach() * log_prob
                 # get current Q estimates
-            current_Q1, current_Q2 = self.critic(torch.FloatTensor(obs).to(self.device), action)
+            current_Q1, current_Q2 = self.critic(torch.Tensor(obs).to(self.device), action)
         elif self.action_type == 'Discrete':
             with torch.no_grad():
-                _, log_prob, action_probs = self.get_action(torch.FloatTensor(next_obs).to(self.device))
-                target_Q1, target_Q2 = self.critic_target(torch.FloatTensor(next_obs).to(self.device))
+                _, log_prob, action_probs = self.get_action(torch.Tensor(next_obs).to(self.device))
+                target_Q1, target_Q2 = self.critic_target(torch.Tensor(next_obs).to(self.device))
                 target_V = action_probs * (torch.min(target_Q1, target_Q2) - self.alpha.detach() * log_prob)
                 target_V = target_V.sum(1).unsqueeze(-1)
                 # get current Q estimates
-            current_Q1, current_Q2 = self.critic(torch.FloatTensor(obs).to(self.device))
+            current_Q1, current_Q2 = self.critic(torch.Tensor(obs).to(self.device))
         
         current_Q1 = current_Q1.gather(1, action.long())
         current_Q2 = current_Q2.gather(1, action.long())
@@ -220,7 +220,7 @@ class SAC(Agent):
         critic_loss =  qf1_loss + qf2_loss
         if print_flag:
             logger.log('train_critic/loss', critic_loss, step)
-        
+
         # Optimize the critic
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
@@ -252,13 +252,13 @@ class SAC(Agent):
     def update_actor_and_alpha(self, obs, logger, step, print_flag=False):   
         if self.action_type == 'Cont':
             action, log_prob, _ = self.get_action(obs)
-            actor_Q1, actor_Q2 = self.critic(torch.FloatTensor(obs).to(self.device), action)
+            actor_Q1, actor_Q2 = self.critic(torch.Tensor(obs).to(self.device), action)
             actor_Q = torch.min(actor_Q1, actor_Q2)
             actor_loss = (self.alpha.detach() * log_prob - actor_Q).mean()
         elif self.action_type == 'Discrete':
             _, log_prob, action_probs = self.get_action(obs)
             with torch.no_grad():
-                actor_Q1, actor_Q2 = self.critic(torch.FloatTensor(obs).to(self.device))
+                actor_Q1, actor_Q2 = self.critic(torch.Tensor(obs).to(self.device))
                 actor_Q = torch.min(actor_Q1, actor_Q2)
             inside_term = (self.alpha.detach() * log_prob) - actor_Q
             actor_loss = (action_probs*inside_term).sum(dim=1).mean()
