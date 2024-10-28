@@ -79,7 +79,7 @@ class Workspace(object):
         start_time = time.time()
         obs, info = self.env.reset(seed = self.cfg.seed)
 
-        for global_step in range(self.cfg.num_seed_steps + self.cfg.num_unsup_steps):
+        for global_step in range(int(self.cfg.num_seed_steps + self.cfg.num_unsup_steps)):
             # sample action for data collection
             if global_step < self.cfg.num_seed_steps:
                 action = self.env.action_space.sample()

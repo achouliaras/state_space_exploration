@@ -18,7 +18,7 @@ def compute_state_entropy(obs, full_obs, k, action_type):
         for idx in range(len(full_obs) // batch_size + 1):
             start = idx * batch_size
             end = (idx + 1) * batch_size
-            if action_type == 'Cont':
+            if action_type == 'Continuous':
                 dist = torch.norm(obs[:, None, :] - full_obs[None, start:end, :], dim=-1, p=2)
             else:
                 #print(full_obs[None, start:end, :].shape)
@@ -123,7 +123,7 @@ class DQNAgent(Agent):
         return self.log_alpha.exp()
 
     def act(self, obs, determ=False):
-        if self.action_type == 'Cont':
+        if self.action_type == 'Continuous':
             raise Exception("DQN doesn't support continuous action spaces")
         elif self.action_type == 'Discrete':
 
@@ -178,7 +178,7 @@ class DQNAgent(Agent):
         step, K=5, print_flag=True):
         
         output = self.actor.forward(next_obs)
-        if self.action_type == 'Cont':
+        if self.action_type == 'Continuous':
             dist = output
             next_action = dist.rsample()
             log_prob = dist.log_prob(next_action).sum(-1, keepdim=True)
@@ -258,7 +258,7 @@ class DQNAgent(Agent):
     
     def update_actor_and_alpha(self, obs, logger, step, print_flag=False):
         output = self.actor.forward(obs)
-        if self.action_type == 'Cont':
+        if self.action_type == 'Continuous':
             dist = output
             action = dist.rsample()
             log_prob = dist.log_prob(action).sum(-1, keepdim=True)

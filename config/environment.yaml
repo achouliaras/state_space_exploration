@@ -10,7 +10,7 @@ architecture: MLP
 mode: 0
 action_space: Null
 obs_space: Null
-action_dim: Null
+# action_dim: Null
 
 #Atari Settings (some for Box2D CarRacing)
 obs_type: rgb # [rgb, ram, greyscale]

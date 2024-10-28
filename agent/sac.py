@@ -9,7 +9,7 @@ from agent.common.actor import DiagGaussianActor, CategoricalActor
 
 class SAC(Agent):
     """SAC algorithm."""
-    def __init__(self, obs_space, obs_dim, action_dim, action_range, device, 
+    def __init__(self, obs_space, obs_dim, action_range, device, 
                  actor_cfg, critic_cfg, action_cfg, discount, init_temperature,
                  learnable_temperature, mode=0, normalize_state_entropy=True):
         super().__init__()
@@ -44,7 +44,7 @@ class SAC(Agent):
         
         self.log_alpha = torch.tensor(np.log(init_temperature), requires_grad=True, dtype=torch.float32, device=self.device)
         # set target entropy 
-        self.target_entropy =  - action_cfg.target_entropy_scale * np.log((1.0 / action_dim)) 
+        self.target_entropy =  - action_cfg.target_entropy_scale * np.log((1.0 / self.actor_cfg.action_dim)) 
 
         # optimizers
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.actor_lr)
@@ -82,7 +82,6 @@ class SAC(Agent):
                 architecture = self.actor_cfg.architecture, 
                 hidden_dim = self.actor_cfg.hidden_dim, 
                 hidden_depth = self.actor_cfg.hidden_depth,
-                log_std_bounds = self.actor_cfg.log_std_bounds,
                 mode= self.mode).to(self.device)
         return actor
     
@@ -116,7 +115,7 @@ class SAC(Agent):
         return self.log_alpha.exp()
 
     def get_action(self, obs):
-        if self.action_type == 'Cont':
+        if self.action_type == 'Continuous':
             mean, log_std = self.actor.forward(obs)
             std = log_std.exp()
             normal = torch.distributions.Normal(mean, std)
@@ -142,7 +141,7 @@ class SAC(Agent):
 
     def update_critic(self, obs, action, reward, next_obs, 
                       not_done, logger, step, print_flag=True):
-        if self.action_type == 'Cont':
+        if self.action_type == 'Continuous':
             with torch.no_grad():
                 next_action, log_prob, _ = self.get_action(torch.Tensor(next_obs).to(self.device))
                 target_Q1, target_Q2 = self.critic_target(torch.Tensor(next_obs).to(self.device), next_action)
@@ -180,14 +179,13 @@ class SAC(Agent):
     def update_critic_state_ent(
         self, obs, full_obs, action, next_obs, not_done, logger,
         step, K=5, print_flag=True):
-        
-        if self.action_type == 'Cont':
+        if self.action_type == 'Continuous':
             with torch.no_grad():
                 next_action, log_prob, _ = self.get_action(torch.Tensor(next_obs).to(self.device))
-                target_Q1, target_Q2 = self.critic_target(torch.Tensor(next_obs).to(self.device), next_action)
+                target_Q1, target_Q2 = self.critic_target(torch.Tensor(next_obs).to(self.device), action = next_action)
                 target_V = torch.min(target_Q1, target_Q2) - self.alpha.detach() * log_prob
                 # get current Q estimates
-            current_Q1, current_Q2 = self.critic(torch.Tensor(obs).to(self.device), action)
+            current_Q1, current_Q2 = self.critic(torch.Tensor(obs).to(self.device), action = action)
         elif self.action_type == 'Discrete':
             with torch.no_grad():
                 _, log_prob, action_probs = self.get_action(torch.Tensor(next_obs).to(self.device))
@@ -196,9 +194,9 @@ class SAC(Agent):
                 target_V = target_V.sum(1).unsqueeze(-1)
                 # get current Q estimates
             current_Q1, current_Q2 = self.critic(torch.Tensor(obs).to(self.device))
+            current_Q1 = current_Q1.gather(1, action.long())
+            current_Q2 = current_Q2.gather(1, action.long())
         
-        current_Q1 = current_Q1.gather(1, action.long())
-        current_Q2 = current_Q2.gather(1, action.long())
         # compute state entropy
         state_entropy = pebble.compute_state_entropy(obs, full_obs, k=K, action_type=self.action_type)
         if print_flag:
@@ -250,7 +248,7 @@ class SAC(Agent):
         )
     
     def update_actor_and_alpha(self, obs, logger, step, print_flag=False):   
-        if self.action_type == 'Cont':
+        if self.action_type == 'Continuous':
             action, log_prob, _ = self.get_action(obs)
             actor_Q1, actor_Q2 = self.critic(torch.Tensor(obs).to(self.device), action)
             actor_Q = torch.min(actor_Q1, actor_Q2)
@@ -276,10 +274,10 @@ class SAC(Agent):
         self.actor.log(logger, step)
 
         if self.learnable_temperature:
-            if self.action_type == 'Cont':
+            if self.action_type == 'Continuous':
                 with torch.no_grad():
-                    _, log_prob, _ = self.actor.get_action(obs)
-                    alpha_loss = (-self.log_alpha.exp() * (log_prob + self.target_entropy).detach()).mean()
+                    _, log_prob, _ = self.get_action(obs)
+                alpha_loss = (-self.log_alpha.exp() * (log_prob + self.target_entropy).detach()).mean()
             elif self.action_type == 'Discrete':
                 alpha_loss = (action_probs.detach() * (-self.log_alpha.exp() * (log_prob + self.target_entropy).detach())).mean()
             
@@ -329,7 +327,7 @@ class SAC(Agent):
                     if self.action_type == 'Discrete': break # Do not update actor as in TD3 for Discrete environments
 
         if step % self.critic_target_update_frequency == 0:
-            self.soft_update_params(self.critic, self.critic_target, self.critic_tau)
+            soft_update_params(self.critic, self.critic_target, self.critic_tau)
     
     def update_after_reset(self, replay_buffer, logger, step, total_timesteps, gradient_update=1, policy_update=True):
         for index in range(gradient_update):
@@ -351,6 +349,6 @@ class SAC(Agent):
                 self.soft_update_params(self.critic, self.critic_target,
                                          self.critic_tau)
     
-    def soft_update_params(net, target_net, tau):
-        for param, target_param in zip(net.parameters(), target_net.parameters()):
-            target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
+def soft_update_params(net, target_net, tau):
+    for param, target_param in zip(net.parameters(), target_net.parameters()):
+        target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)

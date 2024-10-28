@@ -14,7 +14,7 @@ class DiagGaussianActor(nn.Module):
         self.trunk = utils.mlp(obs_dim, hidden_dim, 2 * action_dim, hidden_depth)
 
         self.outputs = dict()
-        self.apply(utils.weight_init)
+        # self.apply(utils.weight_init)
 
     def forward(self, obs):
         mu, log_std = self.trunk(obs).chunk(2, dim=-1)
@@ -34,13 +34,10 @@ class DiagGaussianActor(nn.Module):
 
 class CategoricalActor(nn.Module):
     """torch.distributions implementation of a categorical policy for discrete environments."""
-    def __init__(self, obs_space, obs_dim, action_dim, architecture, hidden_dim, hidden_depth,
-                 log_std_bounds, mode=0):
+    def __init__(self, obs_space, obs_dim, action_dim, architecture, hidden_dim, hidden_depth, mode=0):
         super().__init__()
         self.obs_space = obs_space
         self.architecture = architecture
-        self.log_std_bounds = log_std_bounds
-        #self.categorical = CategoricalDistribution(action_dim)
         
         #print(obs_space.shape[0]) # Needs reshape to 3,7,7
         if architecture =='CNN':

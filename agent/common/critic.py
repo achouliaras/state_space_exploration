@@ -14,7 +14,7 @@ class DoubleQCritic(nn.Module):
             self.cnn, self.flatten = utils.cnn(obs_space, obs_dim[0], mode = mode)
             obs_dim = self.flatten
 
-        if self.action_type == 'Cont':
+        if self.action_type == 'Continuous':
             self.Q1 = utils.mlp(obs_dim + action_dim, hidden_dim, 1, hidden_depth)
             self.Q2 = utils.mlp(obs_dim + action_dim, hidden_dim, 1, hidden_depth)
         elif self.action_type == 'Discrete':    # Calculate Q-value for every Action on discrete action spaces
@@ -28,7 +28,7 @@ class DoubleQCritic(nn.Module):
         if self.architecture =='CNN':
             obs = self.cnn(obs.permute(0, 1, 2, 3))
         
-        if self.action_type == 'Cont':
+        if self.action_type == 'Continuous':
             input_data = torch.cat([obs, action], dim=-1)       # Add Action on continuous action spaces 
         elif self.action_type == 'Discrete':
             input_data = obs

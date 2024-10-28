@@ -7,7 +7,7 @@ def compute_state_entropy(obs, full_obs, k, action_type):
         for idx in range(len(full_obs) // batch_size + 1):
             start = idx * batch_size
             end = (idx + 1) * batch_size
-            if action_type == 'Cont':
+            if action_type == 'Continuous':
                 dist = torch.norm(obs[:, None, :] - full_obs[None, start:end, :], dim=-1, p=2)
             else:
                 #print(full_obs[None, start:end, :].shape)

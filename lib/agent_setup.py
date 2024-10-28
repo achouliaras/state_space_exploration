@@ -8,15 +8,18 @@ def config_agent(cfg):
     if 'Control' in cfg.domain:
         if cfg.action_type == 'Discrete':
             actor_cfg = cfg.categorical_actor
+            critic_cfg = cfg.double_q_critic
         elif cfg.action_type == 'Continuous':
             actor_cfg = cfg.diag_gaussian_actor
+            critic_cfg = cfg.double_q_critic
+            actor_cfg.action_dim = actor_cfg.action_dim[0]
+            critic_cfg.action_dim = critic_cfg.action_dim[0]
         else:
             raise NotImplementedError
-        critic_cfg = cfg.double_q_critic
         
         critic_cfg.action_type = cfg.action_type
         critic_cfg.architecture = cfg.architecture
-        
+
         actor_cfg.action_type = cfg.action_type
         actor_cfg.architecture = cfg.architecture
     elif 'MuJoCo' in cfg.domain:
@@ -25,9 +28,11 @@ def config_agent(cfg):
         
         critic_cfg.action_type = cfg.action_type
         critic_cfg.architecture = cfg.architecture
+        critic_cfg.action_dim = critic_cfg.action_dim[0]
         
         actor_cfg.action_type = cfg.action_type
         actor_cfg.architecture = cfg.architecture
+        actor_cfg.action_dim = actor_cfg.action_dim[0]
     elif 'MiniGrid' in cfg.domain or 'BabyAI' in cfg.domain:
         actor_cfg = cfg.categorical_actor
         critic_cfg = cfg.double_q_critic
@@ -47,13 +52,17 @@ def config_agent(cfg):
     elif 'Box2D' in cfg.domain:
         if 'LunarLander' in cfg.env:
             actor_cfg = cfg.categorical_actor
+            critic_cfg = cfg.double_q_critic
         elif 'BipedalWalker' in cfg.env:
             actor_cfg = cfg.diag_gaussian_actor
+            critic_cfg = cfg.double_q_critic
+            actor_cfg.action_dim = actor_cfg.action_dim[0]
+            critic_cfg.action_dim = critic_cfg.action_dim[0]
         elif 'CarRacing' in cfg.env:
             actor_cfg = cfg.diag_gaussian_actor
+            critic_cfg = cfg.double_q_critic
         else:
             raise NotImplementedError  
-        critic_cfg = cfg.double_q_critic
 
         actor_cfg.action_type = cfg.action_type
         actor_cfg.architecture = cfg.architecture
@@ -75,8 +84,7 @@ def config_agent(cfg):
 def create_agent(cfg, actor_cfg, critic_cfg, action_cfg, obs_space):
 
     agent = SAC(obs_space = obs_space,
-            obs_dim = cfg.agent.obs_dim, 
-            action_dim = cfg.agent.action_dim, 
+            obs_dim = cfg.agent.obs_dim,
             action_range = cfg.agent.action_range, 
             device = torch.device(cfg.device), 
             actor_cfg = actor_cfg,
@@ -90,7 +98,7 @@ def create_agent(cfg, actor_cfg, critic_cfg, action_cfg, obs_space):
     
     replay_buffer = ReplayBuffer(
             obs_space,
-            cfg.agent.obs_dim,
+            cfg.agent.obs_shape,
             cfg.action_space,
             cfg.action_type,
             int(cfg.replay_buffer_capacity), 
