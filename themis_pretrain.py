@@ -77,7 +77,7 @@ class Workspace(object):
         if self.cfg.action_type == 'Discrete' and self.cfg.state_type == 'grid':
             obs = obs['image']
 
-        for global_step in range(int(self.cfg.num_seed_steps + self.cfg.num_unsup_steps)):
+        for global_step in range(int(self.cfg.num_seed_steps + self.cfg.num_unsup_steps+1)):
             # sample action for data collection
             if global_step < self.cfg.num_seed_steps:
                 action = self.env.action_space.sample()
@@ -96,7 +96,7 @@ class Workspace(object):
                 episode_time = time.time() - start_time
                 total_time += episode_time
                 self.logger.log('train/episode', self.episode, global_step)
-                # self.logger.log('train/episode_reward', episode_reward, global_step)
+                self.logger.log('train/episode_reward', episode_reward, global_step)
                 self.logger.log('train/true_episode_reward', true_episode_reward, global_step)
                 self.logger.log('train/duration', episode_time, global_step)
                 self.logger.log('train/total_duration', total_time, global_step)
@@ -113,6 +113,7 @@ class Workspace(object):
                 if self.cfg.log_success:
                     episode_success = 0
                 self.episode += 1
+                self.step = global_step
 
             # Push data to replay buffer
             self.replay_buffer.add(obs, action, reward, next_obs, terminated, truncated)
@@ -138,17 +139,18 @@ class Workspace(object):
             if self.cfg.log_success:
                 episode_success = max(episode_success, terminated)
 
-        # self.logger.log('train/episode', self.episode, global_step)
-        # self.logger.log('train/episode_reward', episode_reward, global_step)
-        # self.logger.log('train/true_episode_reward', true_episode_reward, global_step)
-        # self.logger.log('train/total_feedback', self.total_feedback, global_step)
-        # self.logger.log('train/labeled_feedback', self.labeled_feedback, global_step)
+        episode_time = time.time() - start_time
+        total_time += episode_time
+        self.logger.log('train/episode', self.episode, global_step)
+        self.logger.log('train/episode_reward', episode_reward, global_step)
+        self.logger.log('train/true_episode_reward', true_episode_reward, global_step)
+        self.logger.log('train/duration', episode_time, global_step)
+        self.logger.log('train/total_duration', total_time, global_step)
+        if self.cfg.log_success:
+            self.logger.log('train/episode_success', episode_success, global_step)
+            self.logger.log('train/true_episode_success', episode_success, global_step)
         
-        # if self.cfg.log_success:
-        #     self.logger.log('train/episode_success', episode_success, global_step)
-        #     self.logger.log('train/true_episode_success', episode_success, global_step)
-        # self.logger.log('train/duration', episode_time, global_step)
-        # self.logger.log('train/total_duration', total_time, global_step)
+        self.step = global_step
         self.logger.dump(global_step, ty='train')
         self.env.close()
         print('PRETRAINING FINISHED')
@@ -160,7 +162,7 @@ class Workspace(object):
         keys_to_save = ['step', 'episode']
         payload = {k: self.__dict__[k] for k in keys_to_save}
 
-        agent_setup.save_agent(self.agent, self.replay_buffer, payload, self.work_dir, self.cfg, self.global_frame)
+        agent_setup.save_agent(self.agent, self.replay_buffer, payload, self.work_dir, self.cfg, self.global_step)
         print('SAVING COMPLETED')
         
 @hydra.main(version_base=None, config_path="config", config_name='themis_pretrain')

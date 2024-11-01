@@ -1,6 +1,7 @@
 import lib.env_setup as env_setup
 import lib.agent_setup as agent_setup
 import torch
+from tqdm import tqdm
 
 def evaluate_agent(agent, cfg, logger):
     cfg.save_video=True
@@ -11,7 +12,7 @@ def evaluate_agent(agent, cfg, logger):
     success_rate = 0
     step = 0
     print('EVALUATION STARTS')
-    for episode in range(cfg.num_eval_episodes):
+    for episode in tqdm(range(cfg.num_eval_episodes)):
         obs, info = env.reset(seed = cfg.seed)
         if cfg.action_type == 'Discrete' and cfg.state_type == 'grid':
             obs = obs['image']

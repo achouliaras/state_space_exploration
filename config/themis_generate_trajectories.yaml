@@ -10,63 +10,22 @@ device: cpu
 num_seed_steps: 5e2 # Steps that the agent does random actions to fill the buffers 5e3 for continuous
 num_unsup_steps: 100 #5000
 num_train_steps: 5e6 #1e6 for continuous
-
-episodes_to_gen: 1
-replay_buffer_capacity: 1e6
-
-# unsup training
-gradient_update: 1
-topK: 5
-
-# reward learning
-learn_reward: True
-segment: 50
-activation: tanh
-num_interact: 4000 # After how many steps we retrain the reward model
-reward_model_capacity: 10000 # How many feedbacks can it hold
-reward_lr: 0.003
-reward_batch: 50 # How many segments will be generated for human input
-reward_update: 200 # How many epochs the reward model is training for
-feed_type: 0 # the sampling method used
-ensemble_size: 3
-max_feedback: 1400 # Max total number of interactions (incremented by reward_batch)
-large_batch: 10
-label_margin: 0.0
-reward_scale: 1.0
-reward_intercept: 0.0
-human_teacher: False # Use human input on True, uses synthetic feedback on False
-teacher_beta: -1    # Rationality Constant 0 leads to random choices and infinite (-1) to perfectly rational
-teacher_gamma: 1    # Discound Factor for myopic behavior paying more attention on recent states
-teacher_eps_mistake: 0  # Probability of mistake
-teacher_eps_skip: 0     # Probability of considering both segments bad
-teacher_eps_equal: 0    # Probability of considering both segments equally good
-
-# scheduling
-reward_schedule: 0
-
-# evaluation config
-eval_frequency: 100 #10000
-num_eval_episodes: 10
+episodes_to_gen: 10
+deploy_mode: True
 
 # logger
-log_frequency: 100
-log_save_tb: true
+log_frequency: 1
+log_save_tb: False
 
 # video recorder (Use only in evaluation)
 save_video: false
-video_location: ${models_dir}/env_clips/
+video_location: ${models_dir}/env_traj_gen_clips/
 record_frequency: 1
 
 # setups
 seed: 1
 debug: False
 log_success: True
-
-#Xplain Params
-checkpoint_frec: 500 # No. of steps to 
-checkpoints_dir: ${models_dir}/checkpoints/
-xplain_action: False
-xplain_state: False
 
 models_dir: ${output_dir}/${algorithm.name}_${test}/seed-${seed}
 

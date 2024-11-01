@@ -96,16 +96,19 @@ def create_agent(cfg, actor_cfg, critic_cfg, action_cfg, obs_space):
             mode= cfg.mode, 
             learnable_temperature = cfg.agent.learnable_temperature,
             normalize_state_entropy = True)
-    
-    replay_buffer = ReplayBuffer(
-            obs_space,
-            cfg.agent.obs_shape,
-            cfg.action_space,
-            cfg.action_type,
-            int(cfg.replay_buffer_capacity), 
-            torch.device(cfg.device))
+    if cfg.deploy_mode == False:
+        replay_buffer = ReplayBuffer(
+                obs_space,
+                cfg.agent.obs_shape,
+                cfg.action_space,
+                cfg.action_type,
+                int(cfg.replay_buffer_capacity), 
+                torch.device(cfg.device))
+    else:
+        replay_buffer = None
     
     return agent, replay_buffer
+    
 
 def save_agent(agent, replay_buffer, payload, work_dir, cfg, global_frame):
     models_dir = work_dir / cfg.models_dir / 'models'
@@ -120,18 +123,21 @@ def save_agent(agent, replay_buffer, payload, work_dir, cfg, global_frame):
     
     torch.save(payload, snapshot, pickle_protocol=4)
 
-def load_agent(agent, replay_buffer, payload, work_dir, cfg, global_frame):
-    models_dir = work_dir / cfg.models_dir / f'{cfg.test}' 
-    models_dir.mkdir(exist_ok=True, parents=True)
+def load_agent(work_dir, cfg, agent, replay_buffer=None):
+    models_dir = work_dir / cfg.models_dir / 'models'
+    if not models_dir.exists():
+        print('NOT EXISTS:', models_dir)
+        raise FileNotFoundError()
+    
+    global_frame = cfg.num_seed_steps + cfg.num_unsup_steps
+    # snapshot = models_dir / f'snapshot_{global_frame}.pt'
+    
+    agent.load(models_dir, global_frame)
 
-    # Save agent's models & replay buffer
-    agent.save(models_dir, global_frame)
-    replay_buffer.save(models_dir, global_frame)
-    
-    # Save experiment variables like step and episode
-    snapshot = models_dir / f'snapshot_{global_frame}.pt'
-    
-    torch.save(payload, snapshot, pickle_protocol=4)
+    if replay_buffer != None:
+        replay_buffer.load(models_dir, global_frame)
+
+    return agent, replay_buffer
 
 class eval_mode(object):
     def __init__(self, *models):
