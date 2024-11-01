@@ -1,5 +1,6 @@
 import lib.env_setup as env_setup
 import lib.agent_setup as agent_setup
+import torch
 
 def evaluate_agent(agent, cfg, logger):
     cfg.save_video=True
@@ -23,10 +24,12 @@ def evaluate_agent(agent, cfg, logger):
             episode_success = 0
 
         while not (terminated or truncated):
-            # with agent_setup.eval_mode(agent):
-            #     action = agent.act(obs, sample=False, determ=False) # set determ=True in experiments
-            #     #print(action)
+            
             action = env.action_space.sample()
+            with agent_setup.eval_mode(agent):
+                    action, _, _ = agent.get_action(torch.FloatTensor(obs).to(cfg.device).unsqueeze(0))
+                    action = action.detach().cpu().numpy()[0]
+
             next_obs, reward, terminated, truncated, info = env.step(action)
 
             episode_reward += reward
@@ -55,7 +58,6 @@ def evaluate_agent(agent, cfg, logger):
     logger.log('eval/avg_true_episode_reward', average_true_episode_reward, step)
     if cfg.log_success:
         logger.log('eval/success_rate', success_rate, step)
-        # logger.log('train/true_episode_success', success_rate, step)
-    logger.dump(step)
-    print('EVALUAITON FINISHED')
+    logger.dump(step, ty='eval')
+    print('EVALUATION FINISHED')
     return logger

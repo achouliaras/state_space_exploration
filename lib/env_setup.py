@@ -9,7 +9,6 @@ from copy import deepcopy
 from collections import deque
 
 def record_video_wrap(env, cfg):
-    cfg.video_location = f'clips/{cfg.domain}/{cfg.env}/'
     env = gym.wrappers.RecordVideo(env, cfg.video_location, 
                                    episode_trigger=lambda t: t % cfg.record_frequency == 0, 
                                    disable_logger=True
@@ -18,7 +17,7 @@ def record_video_wrap(env, cfg):
         
 def make_env(cfg, render_mode=None):
     #gym.logger.set_level(40) ???
-    print('GYM LOCATION: ',gym.__file__)
+    # print('GYM LOCATION: ',gym.__file__)
     
     env = None
     env_info = {}
@@ -50,7 +49,7 @@ def make_env(cfg, render_mode=None):
             id = cfg.env
             env = gym.make(id=id, render_mode=render_mode)  
             env = gym.wrappers.RecordEpisodeStatistics(env)
-            # env = gym.wrappers.TimeLimit(env, env._max_episode_steps)
+            env = gym.wrappers.TimeLimit(env, 10)
             if cfg.save_video:
                 env, cfg = record_video_wrap(env, cfg)
 
@@ -150,7 +149,7 @@ def make_env(cfg, render_mode=None):
                                               grayscale_obs=cfg.grayscale_obs, 
                                               scale_obs=cfg.scale_obs)
         env = gym.wrappers.MaxAndSkipObservation(env, skip=cfg.frameskip)
-        # env = gym.wrappers.TimeLimit(env, max_episode_steps = 1000)
+        # env = gym.wrappers.TimeLimit(env, max_episode_steps = 100)
         # if "FIRE" in env.unwrapped.get_action_meanings():
         #     env = FireResetEnv(env)
         # env = ClipRewardEnv(env)

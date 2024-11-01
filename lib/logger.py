@@ -26,12 +26,12 @@ COMMON_EVAL_FORMAT = [
     ('step', 'S', 'int'),
     ('avg_episode_reward', 'AVG-R', 'float'),
     ('avg_true_episode_reward', 'AVG-TR', 'float'),
-    ('success_rate', 'TS', 'float'),
+    ('success_rate', 'SR', 'float'),
 ]
 
 
 AGENT_TRAIN_FORMAT = {
-    'sac': [
+    'SAC': [
         ('batch_reward', 'BR', 'float'),
         ('actor_loss', 'ALOSS', 'float'),
         ('critic_loss', 'CLOSS', 'float'),
@@ -40,7 +40,7 @@ AGENT_TRAIN_FORMAT = {
         ('actor_entropy', 'AENTR', 'float'),
         ('bc_loss', 'BCLOSS', 'float'),
     ],
-    'ppo': [
+    'PPO': [
         ('batch_reward', 'BR', 'float'),
     ],
 }
@@ -64,7 +64,7 @@ class MetersGroup(object):
         self._csv_file_name = self._prepare_file(file_name, 'csv')
         self._formating = formating
         self._meters = defaultdict(AverageMeter)
-        self._csv_file = open(self._csv_file_name, 'w')
+        self._csv_file = open(self._csv_file_name, 'w+')
         self._csv_writer = None
 
     def _prepare_file(self, prefix, suffix):
@@ -90,9 +90,10 @@ class MetersGroup(object):
     def _dump_to_csv(self, data):
         if self._csv_writer is None:
             self._csv_writer = csv.DictWriter(self._csv_file,
-                                              fieldnames=sorted(data.keys()),
+                                              fieldnames=data.keys(),
                                               restval=0.0)
             self._csv_writer.writeheader()
+            self._csv_file.flush()  
         self._csv_writer.writerow(data)
         self._csv_file.flush()
 
@@ -101,7 +102,7 @@ class MetersGroup(object):
             value = int(value)
             return f'{key}: {value}'
         elif ty == 'float':
-            return f'{key}: {value:.04f}'
+            return f'{key}: {value:.03f}'
         elif ty == 'time':
             return f'{key}: {value:04.1f} s'
         elif ty == 'fulltime':
@@ -111,15 +112,15 @@ class MetersGroup(object):
 
     def _dump_to_console(self, data, prefix):
         prefix = colored(prefix, 'yellow' if prefix == 'train' else 'green')
-        pieces = [f' |{prefix: <6}']
+        pieces = [f'|{prefix: <6}']
         for key, disp_key, ty in self._formating:
             value = data.get(key, 0)
             pieces.append(self._format(disp_key, value, ty))
         print(' | '.join(pieces))
 
     def dump(self, step, prefix, save=True):
-        if len(self._meters) == 0:
-            return
+        # if len(self._meters) == 0:
+        #     return
         if save:
             data = self._prime_meters()
             data['step'] = step
@@ -127,18 +128,21 @@ class MetersGroup(object):
             self._dump_to_console(data, prefix)
         self._meters.clear()
 
+    def close(self):
+        self._csv_file.close()
 
 class Logger(object):
     def __init__(self,
                  log_dir,
                  save_tb=False,
-                 experiment_name = 'Experiment',
+                 seed = 1,
                  log_frequency=10000,
-                 agent='sac'):
+                 agent='SAC'):
+        # log_dir = os.path.join(log_dir, f'{agent}_{experiment_name}')
         self._log_dir = log_dir
         self._log_frequency = log_frequency
         if save_tb:
-            tb_dir = os.path.join(log_dir, f'tb/{experiment_name}')
+            tb_dir = os.path.join(log_dir, f'tb/')
             if os.path.exists(tb_dir):
                 try:
                     shutil.rmtree(tb_dir)
@@ -217,3 +221,6 @@ class Logger(object):
             self._train_mg.dump(step, 'train', save)
         else:
             raise f'invalid log type: {ty}'
+    def close(self):
+        self._eval_mg.close()
+        self._train_mg.close()

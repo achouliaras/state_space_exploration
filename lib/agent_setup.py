@@ -1,4 +1,5 @@
 import torch
+import os
 from agent.sac import SAC
 from agent.common.replay_buffer import ReplayBuffer
 
@@ -105,6 +106,32 @@ def create_agent(cfg, actor_cfg, critic_cfg, action_cfg, obs_space):
             torch.device(cfg.device))
     
     return agent, replay_buffer
+
+def save_agent(agent, replay_buffer, payload, work_dir, cfg, global_frame):
+    models_dir = work_dir / cfg.models_dir / 'models'
+    os.makedirs(models_dir, exist_ok=True)
+
+    # Save agent's models & replay buffer
+    agent.save(models_dir, global_frame)
+    replay_buffer.save(models_dir, global_frame)
+    
+    # Save experiment variables like step and episode
+    snapshot = models_dir / f'snapshot_{global_frame}.pt'
+    
+    torch.save(payload, snapshot, pickle_protocol=4)
+
+def load_agent(agent, replay_buffer, payload, work_dir, cfg, global_frame):
+    models_dir = work_dir / cfg.models_dir / f'{cfg.test}' 
+    models_dir.mkdir(exist_ok=True, parents=True)
+
+    # Save agent's models & replay buffer
+    agent.save(models_dir, global_frame)
+    replay_buffer.save(models_dir, global_frame)
+    
+    # Save experiment variables like step and episode
+    snapshot = models_dir / f'snapshot_{global_frame}.pt'
+    
+    torch.save(payload, snapshot, pickle_protocol=4)
 
 class eval_mode(object):
     def __init__(self, *models):

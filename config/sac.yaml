@@ -1,5 +1,5 @@
 algorithm:
-  name: sac
+  name: SAC
 
 agent:
   #_target_: agent.sac.SACAgent

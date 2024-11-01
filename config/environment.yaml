@@ -1,7 +1,7 @@
 # Environment
-domain: Box2D
-env: LunarLander-v3
-render_mode: None
+domain: ALE # MuJoCo
+env: Pong-v5 # InvertedPendulum-v5
+render_mode: rgb_array
 #max_episode_steps: 100
 
 action_type: Null
@@ -10,7 +10,7 @@ architecture: MLP
 mode: 0
 action_space: Null
 obs_space: Null
-# action_dim: Null
+action_dim: Null
 
 #Atari Settings (some for Box2D CarRacing)
 obs_type: rgb # [rgb, ram, greyscale]

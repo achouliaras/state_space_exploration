@@ -25,16 +25,11 @@ from omegaconf import DictConfig
 class Workspace(object):
     def __init__(self, cfg, work_dir):
         self.work_dir = work_dir
-        print(f'Workspace: {self.work_dir}')
-
-        folder = work_dir / cfg.checkpoints_dir    
-        folder.mkdir(exist_ok=True, parents=True)
-        self.checkpoints_dir = cfg.checkpoints_dir
-
+        
         self.logger = Logger(
-            self.work_dir,
+            cfg.models_dir,
             save_tb=cfg.log_save_tb,
-            experiment_name=cfg.experiment + f'_{cfg.seed}',
+            seed=cfg.seed,
             log_frequency=cfg.log_frequency,
             agent=cfg.algorithm.name)
 
@@ -65,7 +60,7 @@ class Workspace(object):
 
     @property
     def global_frame(self):
-        return self.step * self.cfg.action_repeat
+        return self.step #* self.cfg.action_repeat
 
     def run(self):
         self.episode, episode_reward, terminated, truncated = 0, 0, True, False
@@ -74,110 +69,121 @@ class Workspace(object):
         true_episode_reward = 0
         
         # store train returns of recent 10 episodes
-        avg_train_true_return = deque([], maxlen=10) 
+        # avg_train_true_return = deque([], maxlen=10) 
         total_time=0
         start_time = time.time()
-        obs, info = self.env.reset(seed = self.cfg.seed)
+
+        obs, _ = self.env.reset(seed = self.cfg.seed)
+        if self.cfg.action_type == 'Discrete' and self.cfg.state_type == 'grid':
+            obs = obs['image']
 
         for global_step in range(int(self.cfg.num_seed_steps + self.cfg.num_unsup_steps)):
             # sample action for data collection
             if global_step < self.cfg.num_seed_steps:
                 action = self.env.action_space.sample()
-                if global_step == self.cfg.num_seed_steps-1: print('PRETRAINING STARTS')
             else:
                 #with utils.eval_mode(self.agent):
                 action, _, _ = self.agent.get_action(torch.FloatTensor(obs).to(self.device).unsqueeze(0))
                 action = action.detach().cpu().numpy()[0]
+                # print(action)
 
             next_obs, reward, terminated, truncated, info = self.env.step(action)
-            
-            # Push data to replay buffer
-            self.replay_buffer.add(obs, action, reward, next_obs, terminated, truncated)
 
-            obs = next_obs
-
-            if global_step > self.cfg.num_seed_steps:
-                self.agent.update_state_ent(self.replay_buffer, self.logger, 
-                                            global_step, self.cfg.num_train_steps, 
-                                            gradient_update=1, K=self.cfg.topK)
+            if self.cfg.action_type == 'Discrete' and self.cfg.state_type == 'grid':
+                next_obs = next_obs['image']
 
             if terminated or truncated:
-                if global_step > 0:
-                    episode_time = time.time() - start_time
-                    self.logger.log('train/duration', episode_time, global_step)
-                    total_time += episode_time
-                    self.logger.log('train/total_duration', total_time, global_step)
-                    start_time = time.time()
-                    self.logger.dump(
-                        global_step, save=(global_step > self.cfg.num_seed_steps))
-                
-                self.logger.log('train/episode_reward', episode_reward, global_step)
+                episode_time = time.time() - start_time
+                total_time += episode_time
+                self.logger.log('train/episode', self.episode, global_step)
+                # self.logger.log('train/episode_reward', episode_reward, global_step)
                 self.logger.log('train/true_episode_reward', true_episode_reward, global_step)
-                self.logger.log('train/total_feedback', self.total_feedback, global_step)
-                self.logger.log('train/labeled_feedback', self.labeled_feedback, global_step)
-                
+                self.logger.log('train/duration', episode_time, global_step)
+                self.logger.log('train/total_duration', total_time, global_step)
                 if self.cfg.log_success:
                     self.logger.log('train/episode_success', episode_success, global_step)
                     self.logger.log('train/true_episode_success', episode_success, global_step)
-                
-                obs, info = self.env.reset(seed = self.cfg.seed)
 
-                if self.cfg.action_type == 'Discrete' and self.cfg.state_type == 'grid':
-                    obs = obs['image']
+                self.logger.dump(global_step, save=(global_step > self.cfg.num_seed_steps), ty='train')
+                start_time = time.time()
 
-                # self.agent.reset()
-                terminated = False
-                truncated = False
-                episode_reward = 0
-                avg_train_true_return.append(true_episode_reward)
+                # episode_reward = 0
+                # avg_train_true_return.append(true_episode_reward)
                 true_episode_reward = 0
                 if self.cfg.log_success:
                     episode_success = 0
                 self.episode += 1
 
-                self.logger.log('train/episode', self.episode, global_step)
-            
-            # allow infinite bootstrap
-            terminated = float(terminated)
-            # episode_reward += reward_hat
+            # Push data to replay buffer
+            self.replay_buffer.add(obs, action, reward, next_obs, terminated, truncated)
+
+
+            obs = next_obs
             true_episode_reward += reward
+
+            if global_step >= self.cfg.num_seed_steps:
+                self.agent.update_state_ent(self.replay_buffer, self.logger, 
+                                            global_step, self.cfg.num_train_steps, 
+                                            gradient_update=1, K=self.cfg.topK)
+            elif global_step == self.cfg.num_seed_steps-1: 
+                obs, _ = self.env.reset(seed = self.cfg.seed)
+                if self.cfg.action_type == 'Discrete' and self.cfg.state_type == 'grid':
+                    obs = obs['image']
+                
+                self.episode = 0
+                true_episode_reward = 0
+                print('PRETRAINING STARTS')
+            
             
             if self.cfg.log_success:
                 episode_success = max(episode_success, terminated)
-        self.logger.dump(global_step, save=(global_step > self.cfg.num_seed_steps))
+
+        # self.logger.log('train/episode', self.episode, global_step)
+        # self.logger.log('train/episode_reward', episode_reward, global_step)
+        # self.logger.log('train/true_episode_reward', true_episode_reward, global_step)
+        # self.logger.log('train/total_feedback', self.total_feedback, global_step)
+        # self.logger.log('train/labeled_feedback', self.labeled_feedback, global_step)
+        
+        # if self.cfg.log_success:
+        #     self.logger.log('train/episode_success', episode_success, global_step)
+        #     self.logger.log('train/true_episode_success', episode_success, global_step)
+        # self.logger.log('train/duration', episode_time, global_step)
+        # self.logger.log('train/total_duration', total_time, global_step)
+        self.logger.dump(global_step, ty='train')
         self.env.close()
         print('PRETRAINING FINISHED')
         self.logger = evaluate_agent(self.agent, self.cfg, self.logger)
+        self.logger.close()
 
-    def save_snapshot(self):
+    def save_results(self):
         print('SAVING STARTS')
-        snapshot_dir = self.cfg.snapshot_dir        
-        snapshot_dir.mkdir(exist_ok=True, parents=True)
-        self.agent.save(snapshot_dir, self.global_frame)
-        self.replay_buffer.save(snapshot_dir, self.global_frame)
-        snapshot = snapshot_dir / f'snapshot_{self.global_frame}.pt'
         keys_to_save = ['step', 'episode']
         payload = {k: self.__dict__[k] for k in keys_to_save}
-        torch.save(payload, snapshot, pickle_protocol=4)
-        print('SAVING COMPLETE')
+
+        agent_setup.save_agent(self.agent, self.replay_buffer, payload, self.work_dir, self.cfg, self.global_frame)
+        print('SAVING COMPLETED')
         
 @hydra.main(version_base=None, config_path="config", config_name='themis_pretrain')
 def main(cfg : DictConfig):
     work_dir = Path.cwd()
-    workspace = Workspace(cfg, work_dir)
-    cfg.snapshot_dir = work_dir / cfg.snapshot_dir
-    snapshot = cfg.snapshot_dir / f'snapshot_{cfg.num_seed_steps + cfg.num_unsup_steps}.pt'
-    if snapshot.exists():
-        print(f'Snapshot seems to already exist at {cfg.snapshot_dir}')
-        print('Do you want to overwrite it?\n')
-        answer = input('[y]/n \n')
+    # cfg.output_dir = work_dir / cfg.output_dir  
+
+    folder = work_dir / cfg.models_dir
+    if folder.exists():
+        print(f'Experiment for {cfg.algorithm.name}_{cfg.test} with seed {cfg.seed} seems to already exist at {cfg.models_dir}')
+        print('\nDo you want to overwrite it?')
+        answer = input('Answer: [y]/n \n')
+        while answer not in ['', 'y', 'Y', 'yes', 'Yes','n', 'Y','no','No'] :  
+            answer = input('Answer: [y]/n \n')
         if answer in ['n','no','No']: exit()
+    os.makedirs(folder, exist_ok=True)
+    # cfg.models_dir = work_dir / cfg.models_dir 
+    workspace = Workspace(cfg, work_dir)
+    
+    print(f'Workspace: {work_dir}\nSEED {cfg.seed}')
     workspace.run()
-    if snapshot.exists():
-        print(f'Overwriting models at: {cfg.snapshot_dir}')
-    else:
-        print(f'Creating models at: {cfg.snapshot_dir}')
-    # workspace.save_snapshot()
+    workspace.save_results()
+    print(f'Experiment with SEED {cfg.seed} finished')
 
 if __name__ == '__main__':
     main()
