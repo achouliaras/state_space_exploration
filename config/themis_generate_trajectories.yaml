@@ -11,7 +11,9 @@ num_seed_steps: 5e2 # Steps that the agent does random actions to fill the buffe
 num_unsup_steps: 100 #5000
 num_train_steps: 5e6 #1e6 for continuous
 episodes_to_gen: 10
+cpu_id: 0
 deploy_mode: True
+overwrite_trajectories: True
 
 # logger
 log_frequency: 1
@@ -22,6 +24,7 @@ save_video: false
 video_location: ${models_dir}/env_traj_gen_clips/
 record_frequency: 1
 
+vis_dir_name: Trajectory_visualisations
 # setups
 seed: 1
 debug: False

@@ -18,7 +18,7 @@ from collections import deque
 
 import lib.env_setup as env_setup
 import lib.agent_setup as agent_setup
-from lib.eval import evaluate_agent
+from lib.trajectory_io import TrajectoryProcessor
 import hydra
 from omegaconf import DictConfig
 
@@ -44,8 +44,9 @@ class Workspace(object):
         self.agent, _ = agent_setup.create_agent(cfg, actor_cfg, critic_cfg, cfg.agent.action_cfg, self.obs_space)
 
         # LOAD TRAINED AGENT
-        self.agent, _ = agent_setup.load_agent( work_dir, cfg, self.agent)
-
+        self.agent, _ = agent_setup.load_agent(work_dir, cfg, self.agent)
+        
+        self.traj_proc = TrajectoryProcessor(work_dir, cfg)
         print('INIT COMPLETE')
         
     @property
@@ -69,11 +70,7 @@ class Workspace(object):
         self.step = 0
         total_time = 0
         start_time = time.time()
-
-        obs, _ = self.env.reset(seed = self.cfg.seed)
-        if self.cfg.action_type == 'Discrete' and self.cfg.state_type == 'grid':
-            obs = obs['image']
-
+        
         for episode in tqdm(range(self.cfg.episodes_to_gen), desc="GENERATING TRAJECTORIES: "):
             obs, _ = self.env.reset(seed = self.cfg.seed)
             if self.cfg.action_type == 'Discrete' and self.cfg.state_type == 'grid':
@@ -96,7 +93,10 @@ class Workspace(object):
                 if self.cfg.action_type == 'Discrete' and self.cfg.state_type == 'grid':
                     next_obs = next_obs['image']
 
+                frame = self.env.render()
+                
                 # ADD SAVE STATE to files
+                self.traj_proc.add(frame, obs, action, reward)
 
                 episode_reward += reward
                 true_episode_reward += reward
@@ -106,12 +106,14 @@ class Workspace(object):
                 
                 obs = next_obs
                 self.step += 1
-                        
+            self.traj_proc.save(self.traj_proc.traj_dir,episode)
+
             total_episode_reward += episode_reward
             total_true_episode_reward += true_episode_reward
             if self.cfg.log_success:
                 success_rate += episode_success
-        
+        print('TRAJECTORIES GENERATED')
+
         total_time = time.time() - start_time
         self.env.close()
         average_episode_reward = total_episode_reward / self.cfg.episodes_to_gen
@@ -127,7 +129,6 @@ class Workspace(object):
         if self.cfg.log_success:
             self.logger.log('eval/success_rate', success_rate, self.global_step)
         self.logger.dump(self.global_step, ty='eval')
-        print('TRAJECTORIES GENERATED')
         self.logger.close()
         
 @hydra.main(version_base=None, config_path="config", config_name='themis_generate_trajectories')
