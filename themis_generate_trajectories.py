@@ -22,9 +22,11 @@ import lib.utils as utils
 from lib.trajectory_io import TrajectoryProcessor
 import hydra
 from omegaconf import DictConfig
+from termcolor import colored
 
 class Workspace(object):
     def __init__(self, cfg, work_dir):
+        print(colored('EXECUTING GENERATE TRAJECTORIES','green'))
         self.work_dir = work_dir
         
         self.logger = Logger(

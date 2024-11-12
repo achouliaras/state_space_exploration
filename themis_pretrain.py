@@ -22,9 +22,11 @@ import lib.utils as utils
 from lib.eval import evaluate_agent
 import hydra
 from omegaconf import DictConfig
+from termcolor import colored
 
 class Workspace(object):
     def __init__(self, cfg, work_dir):
+        print(colored('EXECUTING PRETRAINING', 'green'))
         self.work_dir = work_dir
         
         self.logger = Logger(

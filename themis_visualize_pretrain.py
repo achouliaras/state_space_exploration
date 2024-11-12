@@ -24,9 +24,10 @@ import lib.utils as utils
 from lib.trajectory_io import TrajectoryProcessor
 import hydra
 from omegaconf import DictConfig
-
+from termcolor import colored
 class Workspace(object):
     def __init__(self, cfg, work_dir):
+        print(colored('EXECUTING VISUALISE PRETRAINING','green'))
         self.work_dir = work_dir
         self.cfg = cfg
 
@@ -66,6 +67,7 @@ class Workspace(object):
                 episode = f"{parts[-2]}_{parts[-1]}"
                 df_episode = self.traj_proc.create_dataframe(episode=episode, label=label)
                 combined_df = pd.concat([combined_df, df_episode], ignore_index=True) # Concat all episodes from the same label
+                print(f'\tExtracted {name}')
             print(f'Trajectory dataset size is: {combined_df.shape}')
         
         combined_df.to_csv(f'{self.traj_proc.vis_dir}/data.csv', index=False)
