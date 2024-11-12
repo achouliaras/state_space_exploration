@@ -15,6 +15,7 @@ fps: 30
 # overwrite_videos: True
 vis_dir_name: Trajectory_visualisations
 label: Null
+export_clips: False
 
 # setups
 seed: 1

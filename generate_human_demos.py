@@ -17,8 +17,8 @@ from lib.logger import Logger
 from collections import deque
 
 import lib.env_setup as env_setup
-import lib.agent_setup as agent_setup
 import lib.utils as utils
+import lib.human_player as human_player
 from lib.trajectory_io import TrajectoryProcessor
 import hydra
 from omegaconf import DictConfig
@@ -37,15 +37,16 @@ class Workspace(object):
         utils.set_seed_everywhere(cfg.seed)
         self.device = torch.device(cfg.device)
 
-        cfg.save_video=True
+        cfg.save_video=False
         self.env, cfg, self.obs_space = env_setup.make_env(cfg, cfg.render_mode)
         self.cfg = cfg
 
-        actor_cfg, critic_cfg = agent_setup.config_agent(cfg)
-        self.agent, _ = agent_setup.create_agent(cfg, actor_cfg, critic_cfg, cfg.agent.action_cfg, self.obs_space)
+        self.agent = human_player.Agent(name=f'{cfg.algorithm.name}_{cfg.test}', action_space=self.env.action_space)
+        # actor_cfg, critic_cfg = agent_setup.config_agent(cfg)
+        # self.agent, _ = agent_setup.create_agent(cfg, actor_cfg, critic_cfg, cfg.agent.action_cfg, self.obs_space)
 
         # LOAD TRAINED AGENT
-        self.agent, _ = agent_setup.load_agent(work_dir, cfg, self.agent)
+        # self.agent, _ = agent_setup.load_agent(work_dir, cfg, self.agent)
         
         self.traj_proc = TrajectoryProcessor(work_dir, cfg)
         print('INIT COMPLETE')
@@ -74,7 +75,6 @@ class Workspace(object):
         
         for episode in tqdm(range(self.cfg.episodes_to_gen), desc="GENERATING TRAJECTORIES: "):
             obs, _ = self.env.reset(seed = self.cfg.seed)
-            # obs, _ = self.env.reset()
             if self.cfg.action_type == 'Discrete' and self.cfg.state_type == 'grid':
                 obs = obs['image']
 
@@ -87,16 +87,15 @@ class Workspace(object):
                 episode_success = 0
 
             while not (terminated or truncated):
-                with agent_setup.eval_mode(self.agent):
-                    action, _, _ = self.agent.get_action(torch.FloatTensor(obs).to(self.device).unsqueeze(0))
-                    action = action.detach().cpu().numpy()[0]
+                action = self.agent.get_action()
 
                 next_obs, reward, terminated, truncated, info = self.env.step(action)
                 if self.cfg.action_type == 'Discrete' and self.cfg.state_type == 'grid':
                     next_obs = next_obs['image']
 
                 frame = self.env.render()
-                
+                time.sleep(0.05)
+
                 # ADD SAVE STATE to files
                 self.traj_proc.add(frame, obs, action, reward)
 
@@ -139,14 +138,19 @@ def main(cfg : DictConfig):
     # cfg.output_dir = work_dir / cfg.output_dir  
 
     folder = work_dir / cfg.models_dir
-    if not folder.exists():
-        print(f"Experiment for {cfg.algorithm.name}_{cfg.test} with seed {cfg.seed} doesn't exist at {cfg.models_dir}")
-        raise FileNotFoundError
+    if folder.exists():
+        print(f'Experiment for {cfg.algorithm.name}_{cfg.test} with seed {cfg.seed} seems to already exist at {cfg.models_dir}')
+        print('\nDo you want to overwrite it?')
+        answer = input('Answer: [y]/n \n')
+        while answer not in ['', 'y', 'Y', 'yes', 'Yes','n', 'Y','no','No'] :  
+            answer = input('Answer: [y]/n \n')
+        if answer in ['n','no','No']: exit()
+    os.makedirs(folder, exist_ok=True)
     workspace = Workspace(cfg, work_dir)
     
     print(f'Workspace: {work_dir}\nSEED {cfg.seed}')
     workspace.run()
-    print(f'Experiment with CPU ID {cfg.cpu_id} and SEED {cfg.seed} finished')
+    print(f'Experiment with SEED {cfg.seed} finished')
 
 if __name__ == '__main__':
     main()

@@ -18,6 +18,7 @@ from collections import deque
 
 import lib.env_setup as env_setup
 import lib.agent_setup as agent_setup
+import lib.utils as utils
 from lib.eval import evaluate_agent
 import hydra
 from omegaconf import DictConfig
@@ -33,7 +34,7 @@ class Workspace(object):
             log_frequency=cfg.log_frequency,
             agent=cfg.algorithm.name)
 
-        # utils.set_seed_everywhere(cfg.seed)
+        utils.set_seed_everywhere(cfg.seed)
         self.device = torch.device(cfg.device)
         self.env, cfg, self.obs_space = env_setup.make_env(cfg, cfg.render_mode)
         self.cfg = cfg
@@ -74,6 +75,7 @@ class Workspace(object):
         start_time = time.time()
 
         obs, _ = self.env.reset(seed = self.cfg.seed)
+        # obs, _ = self.env.reset()
         if self.cfg.action_type == 'Discrete' and self.cfg.state_type == 'grid':
             obs = obs['image']
 
@@ -128,6 +130,7 @@ class Workspace(object):
                                             gradient_update=1, K=self.cfg.topK)
             elif global_step == self.cfg.num_seed_steps-1: 
                 obs, _ = self.env.reset(seed = self.cfg.seed)
+                # obs, _ = self.env.reset()
                 if self.cfg.action_type == 'Discrete' and self.cfg.state_type == 'grid':
                     obs = obs['image']
                 

@@ -168,23 +168,33 @@ class TrajectoryProcessor(object):
         return df
         
     # WIP
-    def state_projection(self, method = "UMAP"):
+    def state_projection(self, data = None, method = "UMAP"):
+        if data is None:
+            raise ValueError("No data were given.")
+        
+        # Split into X and y
+        X = data.drop(columns=['y'])  # All columns except 'y'
+        y = data['y']  
+
         if method == "t-SNE":
             tsne = TSNE(n_components=2, random_state=42)
             X_tsne = tsne.fit_transform(X)
 
             X_reduced_2 = X_tsne
         elif method == "UMAP":
+            
             # Preprocess again
             pipe = make_pipeline(SimpleImputer(strategy="mean"), QuantileTransformer())
             X = pipe.fit_transform(X.copy())
-
+            print(X.isna().any().any())
+            
             # Fit UMAP to processed data
             manifold = umap.UMAP().fit(X, y)
             X_reduced_2 = manifold.transform(X)
 
             # Plot the results
             plt.scatter(X_reduced_2[:, 0], X_reduced_2[:, 1], c=y, s=0.5)
+            plt.show()
         elif method=='PCA':
             raise NotImplementedError
         else:

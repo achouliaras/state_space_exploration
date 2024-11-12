@@ -20,6 +20,7 @@ from collections import deque
 
 import lib.env_setup as env_setup
 import lib.agent_setup as agent_setup
+import lib.utils as utils
 from lib.trajectory_io import TrajectoryProcessor
 import hydra
 from omegaconf import DictConfig
@@ -29,7 +30,7 @@ class Workspace(object):
         self.work_dir = work_dir
         self.cfg = cfg
 
-        # utils.set_seed_everywhere(cfg.seed)
+        utils.set_seed_everywhere(cfg.seed)
         self.device = torch.device(cfg.device)
 
         self.traj_proc = TrajectoryProcessor(work_dir, cfg)
@@ -59,13 +60,16 @@ class Workspace(object):
                 self.traj_proc.load(traj_dir, name)
                 self.traj_proc.resample(rate)
                 filename = os.path.splitext(name)[0] # remove .pt suffix from the name
-                self.traj_proc.export_to_video(label, filename=filename,fps=self.cfg.fps)
+                if self.cfg.export_clips :self.traj_proc.export_to_video(label, filename=filename,fps=self.cfg.fps)
 
                 parts = filename.split("_")
                 episode = f"{parts[-2]}_{parts[-1]}"
-                df_episode = self.traj_proc.create_dataframe(episode=episode, label=self.cfg.label)
+                df_episode = self.traj_proc.create_dataframe(episode=episode, label=label)
                 combined_df = pd.concat([combined_df, df_episode], ignore_index=True) # Concat all episodes from the same label
             print(f'Trajectory dataset size is: {combined_df.shape}')
+        
+        combined_df.to_csv(f'{self.traj_proc.vis_dir}/data.csv', index=False)
+        print(f'Dataset created at: {self.traj_proc.vis_dir}')
         
 @hydra.main(version_base=None, config_path="config", config_name='themis_visualise_trajectories')
 def main(cfg : DictConfig):

@@ -16,6 +16,7 @@ action_dim: Null
 obs_type: rgb # [rgb, ram, greyscale]
 frame_stack: 4 # only works if obs_type=pixels
 frameskip: 4
+max_episode_steps: False
 action_repeat: 1 # set to 2 for pixels
 noop_max: 30
 grayscale_obs: True

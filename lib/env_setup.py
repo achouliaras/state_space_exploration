@@ -141,19 +141,23 @@ def make_env(cfg, render_mode=None):
         # gym.register_envs(ale_py)
         #Helper function to create Atari environment
         id=cfg.domain+'/'+cfg.env
-        env = gym.make(id=id,render_mode=render_mode)
+        if cfg.max_episode_steps:
+            print('ELA PAME LIGO')
+            env = gym.make(id=id,render_mode=render_mode, frameskip=1, max_episode_steps=cfg.max_episode_steps)
+        else:
+            env = gym.make(id=id,render_mode=render_mode, frameskip=1)
+            
         env = gym.wrappers.RecordEpisodeStatistics(env)
-        env = gym.wrappers.AtariPreprocessing(env, noop_max=cfg.noop_max, 
-                                              frame_skip=1, 
-                                              screen_size=84, 
-                                              grayscale_obs=cfg.grayscale_obs, 
-                                              scale_obs=cfg.scale_obs)
-        env = gym.wrappers.MaxAndSkipObservation(env, skip=cfg.frameskip)
-        # env = gym.wrappers.TimeLimit(env, max_episode_steps = 100)
+        if cfg.frameskip > 1 : env = gym.wrappers.AtariPreprocessing(env, noop_max=cfg.noop_max, 
+                                                                    frame_skip=1, 
+                                                                    screen_size=84, 
+                                                                    grayscale_obs=cfg.grayscale_obs, 
+                                                                    scale_obs=cfg.scale_obs)
+        if cfg.frameskip > 1 : env = gym.wrappers.MaxAndSkipObservation(env, skip=cfg.frameskip)
         # if "FIRE" in env.unwrapped.get_action_meanings():
         #     env = FireResetEnv(env)
         # env = ClipRewardEnv(env)
-        env = gym.wrappers.FrameStackObservation(env, cfg.frame_stack)
+        if cfg.frame_stack > 1 : env = gym.wrappers.FrameStackObservation(env, cfg.frame_stack)
         if cfg.save_video:
             env, cfg = record_video_wrap(env, cfg)
 

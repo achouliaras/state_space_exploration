@@ -43,6 +43,9 @@ AGENT_TRAIN_FORMAT = {
     'PPO': [
         ('batch_reward', 'BR', 'float'),
     ],
+    'HUMAN': [
+        ('batch_reward', 'BR', 'float'),
+    ],
 }
 
 
