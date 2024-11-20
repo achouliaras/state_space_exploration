@@ -39,6 +39,7 @@ class Workspace(object):
         utils.set_seed_everywhere(cfg.seed)
         self.device = torch.device(cfg.device)
         self.env, cfg, self.obs_space = env_setup.make_env(cfg, cfg.render_mode)
+        self.env.action_space.seed(cfg.seed)
         self.cfg = cfg
         
         actor_cfg, critic_cfg = agent_setup.config_agent(cfg)
@@ -66,7 +67,7 @@ class Workspace(object):
         return self.step #* self.cfg.action_repeat
 
     def run(self):
-        self.episode, episode_reward, terminated, truncated = 0, 0, True, False
+        self.episode, episode_reward, terminated, truncated = 0, 0, False, False
         if self.cfg.log_success:
             episode_success = 0
         true_episode_reward = 0
@@ -78,6 +79,9 @@ class Workspace(object):
 
         obs, _ = self.env.reset(seed = self.cfg.seed)
         # obs, _ = self.env.reset()
+        obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
+
+        
         if self.cfg.action_type == 'Discrete' and self.cfg.state_type == 'grid':
             obs = obs['image']
 
@@ -118,6 +122,9 @@ class Workspace(object):
                     episode_success = 0
                 self.episode += 1
                 self.step = global_step
+                next_obs, _ = self.env.reset()
+                next_obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
+                
 
             # Push data to replay buffer
             self.replay_buffer.add(obs, action, reward, next_obs, terminated, truncated)
@@ -131,8 +138,9 @@ class Workspace(object):
                                             global_step, self.cfg.num_train_steps, 
                                             gradient_update=1, K=self.cfg.topK)
             elif global_step == self.cfg.num_seed_steps-1: 
-                obs, _ = self.env.reset(seed = self.cfg.seed)
-                # obs, _ = self.env.reset()
+                obs, _ = self.env.reset()
+                obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
+                
                 if self.cfg.action_type == 'Discrete' and self.cfg.state_type == 'grid':
                     obs = obs['image']
                 
@@ -174,10 +182,12 @@ class Workspace(object):
 def main(cfg : DictConfig):
     work_dir = Path.cwd()
     # cfg.output_dir = work_dir / cfg.output_dir  
-
+    
     folder = work_dir / cfg.models_dir
     if folder.exists():
         print(f'Experiment for {cfg.algorithm.name}_{cfg.test} with seed {cfg.seed} seems to already exist at {cfg.models_dir}')
+        # print('Pretraining abort...')
+        # exit()
         print('\nDo you want to overwrite it?')
         answer = input('Answer: [y]/n \n')
         while answer not in ['', 'y', 'Y', 'yes', 'Yes','n', 'Y','no','No'] :  

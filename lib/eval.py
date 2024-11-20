@@ -13,10 +13,12 @@ def evaluate_agent(agent, cfg, logger):
     step = 0
     print('EVALUATION STARTS')
     for episode in tqdm(range(cfg.num_eval_episodes)):
-        obs, info = env.reset(seed = cfg.seed)
+        obs, _ = env.reset()
+        obs, _, _, _, _ = env.step(1) # FIRE action for breakout
+
         if cfg.action_type == 'Discrete' and cfg.state_type == 'grid':
             obs = obs['image']
-        # agent.reset()
+        
         terminated = False
         truncated = False
         episode_reward = 0

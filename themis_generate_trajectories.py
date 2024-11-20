@@ -75,12 +75,13 @@ class Workspace(object):
         start_time = time.time()
         
         for episode in tqdm(range(self.cfg.episodes_to_gen), desc="GENERATING TRAJECTORIES: "):
-            obs, _ = self.env.reset(seed = self.cfg.seed)
-            # obs, _ = self.env.reset()
+            # obs, _ = self.env.reset(seed = self.cfg.seed)
+            obs, _ = self.env.reset()
+            obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
+            
             if self.cfg.action_type == 'Discrete' and self.cfg.state_type == 'grid':
                 obs = obs['image']
-
-            # agent.reset()
+            
             terminated = False
             truncated = False
             episode_reward = 0

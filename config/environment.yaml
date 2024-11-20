@@ -19,5 +19,6 @@ frameskip: 4
 max_episode_steps: False
 action_repeat: 1 # set to 2 for pixels
 noop_max: 30
+terminal_on_life_loss: False
 grayscale_obs: True
 scale_obs: False

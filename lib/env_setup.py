@@ -142,7 +142,6 @@ def make_env(cfg, render_mode=None):
         #Helper function to create Atari environment
         id=cfg.domain+'/'+cfg.env
         if cfg.max_episode_steps:
-            print('ELA PAME LIGO')
             env = gym.make(id=id,render_mode=render_mode, frameskip=1, max_episode_steps=cfg.max_episode_steps)
         else:
             env = gym.make(id=id,render_mode=render_mode, frameskip=1)
@@ -151,6 +150,7 @@ def make_env(cfg, render_mode=None):
         if cfg.frameskip > 1 : env = gym.wrappers.AtariPreprocessing(env, noop_max=cfg.noop_max, 
                                                                     frame_skip=1, 
                                                                     screen_size=84, 
+                                                                    terminal_on_life_loss=cfg.terminal_on_life_loss,
                                                                     grayscale_obs=cfg.grayscale_obs, 
                                                                     scale_obs=cfg.scale_obs)
         if cfg.frameskip > 1 : env = gym.wrappers.MaxAndSkipObservation(env, skip=cfg.frameskip)

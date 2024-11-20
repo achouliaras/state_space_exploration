@@ -106,8 +106,14 @@ class TrajectoryProcessor(object):
         self.rewards =[]
     
     def load(self, traj_dir, filename):
+        self.frames = []
+        self.observations = []
+        self.actions = []
+        self.rewards =[]
+
         payload = torch.load(f'{traj_dir}/{filename}')
         self.frames, self.observations, self.actions, self.rewards = [payload[k] for k in self.keys_for_payload]
+        del payload
 
     def get_trajectory_filenames(self, traj_dir):
         files = []
