@@ -1,6 +1,6 @@
 # Environment
-domain: ALE # MuJoCo
-env: Pong-v5 # InvertedPendulum-v5
+domain: highway-env # ALE # MuJoCo
+env: highway-v0 # Pong-v5 # InvertedPendulum-v5
 render_mode: rgb_array
 #max_episode_steps: 100
 

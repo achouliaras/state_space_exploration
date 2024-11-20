@@ -101,7 +101,7 @@ def make_env(cfg, render_mode=None):
     elif 'MiniGrid' in cfg.domain or 'BabyAI' in cfg.domain:
         import minigrid
 
-        minigrid.register_minigrid_envs()
+        # minigrid.register_minigrid_envs()
         # gym.pprint_registry()
         #Helper function to create MiniGrid environment
         id = cfg.domain+'-'+cfg.env
@@ -251,9 +251,9 @@ def make_env(cfg, render_mode=None):
         else:
             raise NotImplementedError
     elif 'highway-env' in cfg.domain:
-        import highway_env      # Wait for official update
+        import highway_env
 
-        highway_env.register_highway_envs()
+        # highway_env.register_highway_envs()
         # gym.pprint_registry()
         id = cfg.env
         env = gym.make(id=id, render_mode=None)

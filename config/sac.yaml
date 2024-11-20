@@ -43,6 +43,7 @@ double_q_critic:
   obs_dim: ${agent.obs_dim}
   action_dim: ${agent.action_dim}
   action_type: 'Discrete'
+  state_type: 'tabular'
   architecture: 'MLP'
   hidden_dim: 512
   hidden_depth: 1

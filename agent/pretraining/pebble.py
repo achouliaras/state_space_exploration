@@ -1,20 +1,21 @@
 import torch
 
-def compute_state_entropy(obs, full_obs, k, action_type):
+def compute_state_entropy(obs, full_obs, k, state_type):
     batch_size = 100
     with torch.no_grad():
         dists = []
         for idx in range(len(full_obs) // batch_size + 1):
             start = idx * batch_size
             end = (idx + 1) * batch_size
-            if action_type == 'Continuous':
+            # print(full_obs[None, start:end, :].shape)
+            # print(obs[:, None, :].shape)
+            if state_type == 'tabular':
                 dist = torch.norm(obs[:, None, :] - full_obs[None, start:end, :], dim=-1, p=2)
             else:
-                #print(full_obs[None, start:end, :].shape)
-                #print(obs[:, None, :].shape)
-                dist = torch.norm(obs[:, None, :] - full_obs[None, start:end, :], dim=(-1,-2,-3), p=2)
+                obs_shape = obs[:, None, :].ndim
+                dist = torch.norm(obs[:, None, :] - full_obs[None, start:end, :], dim=list(range(2,obs_shape)), p=2)
             dists.append(dist)
-
+            # print(dist.shape)
         dists = torch.cat(dists, dim=1)
         knn_dists = torch.kthvalue(dists, k=k + 1, dim=1).values
         state_entropy = knn_dists

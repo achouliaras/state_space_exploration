@@ -35,6 +35,7 @@ class SAC(Agent):
         self.actor_cfg = actor_cfg
         self.actor_lr = action_cfg.actor_lr
         self.action_type = self.actor_cfg.action_type
+        self.state_type = self.critic_cfg.state_type
         self.mode = mode
 
         self.critic = self.create_critic()
@@ -198,7 +199,7 @@ class SAC(Agent):
             current_Q2 = current_Q2.gather(1, action.long())
         
         # compute state entropy
-        state_entropy = pebble.compute_state_entropy(obs, full_obs, k=K, action_type=self.action_type)
+        state_entropy = pebble.compute_state_entropy(obs, full_obs, k=K, state_type=self.state_type)
         if print_flag:
             logger.log("train_critic/entropy", state_entropy.mean(), step)
             logger.log("train_critic/entropy_max", state_entropy.max(), step)

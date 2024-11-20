@@ -19,6 +19,7 @@ def config_agent(cfg):
             raise NotImplementedError
         
         critic_cfg.action_type = cfg.action_type
+        critic_cfg.state_type = cfg.state_type
         critic_cfg.architecture = cfg.architecture
 
         actor_cfg.action_type = cfg.action_type
@@ -32,6 +33,7 @@ def config_agent(cfg):
         critic_cfg.action_dim = critic_cfg.action_dim[0]
         
         actor_cfg.action_type = cfg.action_type
+        critic_cfg.state_type = cfg.state_type
         actor_cfg.architecture = cfg.architecture
         actor_cfg.action_dim = actor_cfg.action_dim[0]
     elif 'MiniGrid' in cfg.domain or 'BabyAI' in cfg.domain:
@@ -41,6 +43,7 @@ def config_agent(cfg):
         actor_cfg.action_type = cfg.action_type
         actor_cfg.architecture = cfg.architecture
         critic_cfg.action_type = cfg.action_type
+        critic_cfg.state_type = cfg.state_type
         critic_cfg.architecture = cfg.architecture
     elif 'ALE' in cfg.domain:
         actor_cfg = cfg.categorical_actor
@@ -49,6 +52,7 @@ def config_agent(cfg):
         actor_cfg.action_type = cfg.action_type
         actor_cfg.architecture = cfg.architecture
         critic_cfg.action_type = cfg.action_type
+        critic_cfg.state_type = cfg.state_type
         critic_cfg.architecture = cfg.architecture
     elif 'Box2D' in cfg.domain:
         if 'LunarLander' in cfg.env:
@@ -68,6 +72,7 @@ def config_agent(cfg):
         actor_cfg.action_type = cfg.action_type
         actor_cfg.architecture = cfg.architecture
         critic_cfg.action_type = cfg.action_type
+        critic_cfg.state_type = cfg.state_type
         critic_cfg.architecture = cfg.architecture
     elif 'highway-env' in cfg.domain:
         actor_cfg = cfg.categorical_actor
@@ -76,6 +81,7 @@ def config_agent(cfg):
         actor_cfg.action_type = cfg.action_type
         actor_cfg.architecture = cfg.architecture
         critic_cfg.action_type = cfg.action_type
+        critic_cfg.state_type = cfg.state_type
         critic_cfg.architecture = cfg.architecture
     else:
         raise NotImplementedError
