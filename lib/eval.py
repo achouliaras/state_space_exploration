@@ -15,9 +15,6 @@ def evaluate_agent(agent, cfg, logger):
     for episode in tqdm(range(cfg.num_eval_episodes)):
         obs, _ = env.reset()
         obs, _, _, _, _ = env.step(1) # FIRE action for breakout
-
-        if cfg.action_type == 'Discrete' and cfg.state_type == 'grid':
-            obs = obs['image']
         
         terminated = False
         truncated = False
@@ -39,8 +36,7 @@ def evaluate_agent(agent, cfg, logger):
             true_episode_reward += reward
             if cfg.log_success:
                 episode_success = max(episode_success, terminated)
-            if cfg.action_type == 'Discrete' and cfg.state_type == 'grid':
-                next_obs = next_obs['image']
+            
             obs = next_obs
             step += 1
             

@@ -26,7 +26,7 @@ from termcolor import colored
 
 class Workspace(object):
     def __init__(self, cfg, work_dir):
-        print(colored('EXECUTING PRETRAINING', 'green'))
+        print(colored('EXECUTING TRAINING', 'green'))
         self.work_dir = work_dir
         
         self.logger = Logger(
@@ -45,6 +45,9 @@ class Workspace(object):
         actor_cfg, critic_cfg = agent_setup.config_agent(cfg)
 
         self.agent, self.replay_buffer = agent_setup.create_agent(cfg, actor_cfg, critic_cfg, cfg.agent.action_cfg, self.obs_space)
+        
+        # Load AGENT
+
         # for logging
         self.total_feedback = 0
         self.labeled_feedback = 0
@@ -79,14 +82,16 @@ class Workspace(object):
 
         obs, _ = self.env.reset(seed = self.cfg.seed)
         # obs, _ = self.env.reset()
-        obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
-
-        for global_step in range(int(self.cfg.num_seed_steps + self.cfg.num_unsup_steps+1)):
-            # sample action for data collection
-            if global_step < self.cfg.num_seed_steps:
-                action = self.env.action_space.sample()
+        # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
+        
+        for global_step in range(int(self.cfg.num_train_steps)+1):
+            # Bootstrap Replay buffer with actions from the pretrained agent. No need for random sampling
+            if global_step < self.cfg.num_seed_steps + self.cfg.num_unsup_steps:
+                with torch.no_grad():
+                    action, _, _ = self.agent.get_action(torch.FloatTensor(obs).to(self.device).unsqueeze(0))
+                action = action.detach().cpu().numpy()[0]
+                # action = self.env.action_space.sample()
             else:
-                #with utils.eval_mode(self.agent):
                 action, _, _ = self.agent.get_action(torch.FloatTensor(obs).to(self.device).unsqueeze(0))
                 action = action.detach().cpu().numpy()[0]
                 # print(action)
@@ -105,7 +110,7 @@ class Workspace(object):
                     self.logger.log('train/episode_success', episode_success, global_step)
                     self.logger.log('train/true_episode_success', episode_success, global_step)
 
-                self.logger.dump(global_step, save=(global_step > self.cfg.num_seed_steps), ty='train')
+                self.logger.dump(global_step, save=(global_step > self.cfg.num_seed_steps + self.cfg.num_unsup_steps), ty='train')
                 start_time = time.time()
 
                 # episode_reward = 0
@@ -116,7 +121,7 @@ class Workspace(object):
                 self.episode += 1
                 self.step = global_step
                 next_obs, _ = self.env.reset()
-                next_obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
+                # next_obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
                 
 
             # Push data to replay buffer
@@ -126,18 +131,18 @@ class Workspace(object):
             obs = next_obs
             true_episode_reward += reward
 
-            # Pre-Training Update
-            if global_step >= self.cfg.num_seed_steps:
-                self.agent.update_state_ent(self.replay_buffer, self.logger, 
-                                            global_step, self.cfg.num_train_steps, 
-                                            gradient_update=1, K=self.cfg.topK)
-            elif global_step == self.cfg.num_seed_steps-1: 
+            # Training Update
+            if global_step >= self.cfg.num_seed_steps + self.cfg.num_unsup_steps:
+                self.agent.update(self.replay_buffer, self.logger, global_step, 
+                                  self.cfg.num_train_steps, gradient_update=1)
+                
+            elif global_step == self.cfg.num_seed_steps + self.cfg.num_unsup_steps-1: 
                 obs, _ = self.env.reset()
-                obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
+                # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
                                 
                 self.episode = 0
                 true_episode_reward = 0
-                print('PRETRAINING STARTS')
+                print('TRAINING STARTS')
             
             
             if self.cfg.log_success:
@@ -157,7 +162,7 @@ class Workspace(object):
         self.step = global_step
         self.logger.dump(global_step, ty='train')
         self.env.close()
-        print('PRETRAINING FINISHED')
+        print('TRAINING FINISHED')
         self.logger = evaluate_agent(self.agent, self.cfg, self.logger)
         self.logger.close()
 
@@ -169,7 +174,7 @@ class Workspace(object):
         agent_setup.save_agent(self.agent, self.replay_buffer, payload, self.work_dir, self.cfg, self.global_step)
         print('SAVING COMPLETED')
         
-@hydra.main(version_base=None, config_path="config", config_name='themis_pretrain')
+@hydra.main(version_base=None, config_path="config", config_name='themis_train')
 def main(cfg : DictConfig):
     work_dir = Path.cwd()
     # cfg.output_dir = work_dir / cfg.output_dir  

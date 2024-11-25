@@ -105,14 +105,15 @@ def make_env(cfg, render_mode=None):
         # gym.pprint_registry()
         #Helper function to create MiniGrid environment
         id = cfg.domain+'-'+cfg.env
-        env = gym.make(id=id, render_mode=render_mode)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
-        env = gym.wrappers.TimeLimit(env, max_episode_steps = 100)
+        if cfg.max_episode_steps:
+            env = gym.make(id=id, render_mode=render_mode, max_episode_steps=cfg.max_episode_steps)
+        else:
+            env = gym.make(id=id, render_mode=render_mode) 
         
-        # env = ResizeObservation(env,64)
-        # env = FullyObsWrapper(env)
         # env = PositionBonus(env)
-        # env = RGBImgObsWrapper(tile_size = 8)
+        env = minigrid.wrappers.FullyObsWrapper(env)
+        env = minigrid.wrappers.ImgObsWrapper(env)
+        
         if cfg.save_video:
             env, cfg = record_video_wrap(env, cfg)
 
@@ -121,7 +122,7 @@ def make_env(cfg, render_mode=None):
         cfg.architecture = 'MLP'
         cfg.mode = 1
         cfg.action_space = [1]
-        obs_space = env.observation_space['image']
+        obs_space = env.observation_space
         sp = list(obs_space.shape) # Reorder first 2 dimensions to match state shape
         # obs_space_shape = sp[1], sp[0], sp[2] # Test
         # cfg.action_dim = env.action_space.shape
@@ -256,7 +257,7 @@ def make_env(cfg, render_mode=None):
         # highway_env.register_highway_envs()
         # gym.pprint_registry()
         id = cfg.env
-        env = gym.make(id=id, render_mode=None)
+        env = gym.make(id=id, render_mode=render_mode)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         # env = TimeLimit(env, max_episode_steps = 100)
         if cfg.save_video:

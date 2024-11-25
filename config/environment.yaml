@@ -1,6 +1,6 @@
 # Environment
-domain: highway-env # ALE # MuJoCo
-env: highway-v0 # Pong-v5 # InvertedPendulum-v5
+domain: MiniGrid # highway-env # ALE # MuJoCo
+env: BlockedUnlockPickup-v0 # highway-v0 # Pong-v5 # InvertedPendulum-v5
 render_mode: rgb_array
 #max_episode_steps: 100
 

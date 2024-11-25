@@ -41,10 +41,10 @@ class Workspace(object):
         self.env, cfg, self.obs_space = env_setup.make_env(cfg, cfg.render_mode)
         self.cfg = cfg
 
-        self.agent = human_player.Agent(name=f'{cfg.algorithm.name}_{cfg.test}', action_space=self.env.action_space)
+        self.agent = human_player.Agent(name=f'{cfg.algorithm.name}_{cfg.test}', action_space=self.env.action_space, cfg=cfg)
         # actor_cfg, critic_cfg = agent_setup.config_agent(cfg)
         # self.agent, _ = agent_setup.create_agent(cfg, actor_cfg, critic_cfg, cfg.agent.action_cfg, self.obs_space)
-
+        print(self.env.action_space)
         # LOAD TRAINED AGENT
         # self.agent, _ = agent_setup.load_agent(work_dir, cfg, self.agent)
         
@@ -74,11 +74,8 @@ class Workspace(object):
         start_time = time.time()
         
         for episode in tqdm(range(self.cfg.episodes_to_gen), desc="GENERATING TRAJECTORIES: "):
-            obs, _ = self.env.reset(seed = self.cfg.seed)
-            if self.cfg.action_type == 'Discrete' and self.cfg.state_type == 'grid':
-                obs = obs['image']
-
-            # agent.reset()
+            obs, _ = self.env.reset()
+            
             terminated = False
             truncated = False
             episode_reward = 0
@@ -90,9 +87,9 @@ class Workspace(object):
                 action = self.agent.get_action()
 
                 next_obs, reward, terminated, truncated, info = self.env.step(action)
-                if self.cfg.action_type == 'Discrete' and self.cfg.state_type == 'grid':
-                    next_obs = next_obs['image']
-
+                
+                print(next_obs.shape)
+                print(reward, terminated, truncated)
                 frame = self.env.render()
                 time.sleep(0.05)
 
@@ -140,11 +137,15 @@ def main(cfg : DictConfig):
     folder = work_dir / cfg.models_dir
     if folder.exists():
         print(f'Experiment for {cfg.algorithm.name}_{cfg.test} with seed {cfg.seed} seems to already exist at {cfg.models_dir}')
-        print('\nDo you want to overwrite it?')
-        answer = input('Answer: [y]/n \n')
-        while answer not in ['', 'y', 'Y', 'yes', 'Yes','n', 'Y','no','No'] :  
+        if cfg.overwrite_trajectories:
+            print('\n Overwrite mode is on. Are you sure you want to do it?')
             answer = input('Answer: [y]/n \n')
-        if answer in ['n','no','No']: exit()
+            while answer not in ['', 'y', 'Y', 'yes', 'Yes','n', 'Y','no','No'] :  
+                answer = input('Answer: [y]/n \n')
+            if answer in ['n','no','No']: exit()
+        else:
+            print('\n You are gonna add more trajectories')
+            time.sleep(1)
     os.makedirs(folder, exist_ok=True)
     workspace = Workspace(cfg, work_dir)
     
