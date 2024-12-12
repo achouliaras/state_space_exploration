@@ -9,11 +9,11 @@ class SimpleCritic(nn.Module):
         super().__init__()
         self.action_type = action_type
         
-        if self.architecture == 'Continuous':
+        if self.action_type == 'Continuous':
             self.actor_mean = utils.mlp(np.array(input_dim).prod(), np.prod(output_dim), 
                                    hidden_depth, hidden_dim, activation=nn.Tanh)
             
-        elif self.architecture == 'Discrete':
+        elif self.action_type == 'Discrete':
             self.actor = utils.mlp(np.array(input_dim).prod(), np.prod(output_dim), 
                                    hidden_depth, hidden_dim, activation=nn.ReLU)
         else:
@@ -58,7 +58,7 @@ class DoubleQCritic(nn.Module):
         self.action_type = action_type
 
         # If obs is image-like use feature extraction
-        if self.architecture =='CNN':
+        if 'CNN' in self.architecture:
             self.cnn, self.flatten = utils.cnn(obs_space, obs_dim[0], mode = mode)
             obs_dim = self.flatten
 
@@ -73,7 +73,7 @@ class DoubleQCritic(nn.Module):
         #self.apply(utils.weight_init)
 
     def forward(self, obs, action=None):
-        if self.architecture =='CNN':
+        if 'CNN' in self.architecture:
             obs = self.cnn(obs.permute(0, 1, 2, 3))
         
         if self.action_type == 'Continuous':

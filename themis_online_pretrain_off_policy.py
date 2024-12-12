@@ -40,7 +40,7 @@ class Workspace(object):
             save_tb=cfg.log_save_tb,
             seed=cfg.seed,
             log_frequency=cfg.log_frequency,
-            agent=cfg.algorithm.name)
+            agent=cfg.agent.name)
 
         utils.set_seed_everywhere(cfg.seed)
         self.device = torch.device(cfg.device)
@@ -48,9 +48,7 @@ class Workspace(object):
         self.env.action_space.seed(cfg.seed)
         self.cfg = cfg
         
-        actor_cfg, critic_cfg = agent_setup.config_agent(cfg)
-
-        self.agent, self.replay_buffer = agent_setup.create_agent(cfg, actor_cfg, critic_cfg, cfg.agent.action_cfg, self.obs_space)
+        self.agent, self.replay_buffer = agent_setup.create_agent(cfg, cfg.agent.action_cfg, self.obs_space)
         # for logging
         self.total_feedback = 0
         self.labeled_feedback = 0
@@ -180,9 +178,12 @@ def main(cfg : DictConfig):
     work_dir = Path.cwd()
     # cfg.output_dir = work_dir / cfg.output_dir  
     
+    print(cfg.agent.name)
+    print(cfg.agent.init_temperature)
+
     folder = work_dir / cfg.models_dir
     if folder.exists():
-        print(f'Experiment for {cfg.algorithm.name}_{cfg.test} with seed {cfg.seed} seems to already exist at {cfg.models_dir}')
+        print(f'Experiment for {cfg.agent.name}_{cfg.test} with seed {cfg.seed} seems to already exist at {cfg.models_dir}')
         # print('Pretraining abort...')
         # exit()
         print('\nDo you want to overwrite it?')

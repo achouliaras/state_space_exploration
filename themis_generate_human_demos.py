@@ -32,7 +32,7 @@ class Workspace(object):
             save_tb=cfg.log_save_tb,
             seed=cfg.seed,
             log_frequency=cfg.log_frequency,
-            agent=cfg.algorithm.name)
+            agent=cfg.agent.name)
 
         utils.set_seed_everywhere(cfg.seed)
         self.device = torch.device(cfg.device)
@@ -41,7 +41,7 @@ class Workspace(object):
         self.env, cfg, self.obs_space = env_setup.make_env(cfg, cfg.render_mode)
         self.cfg = cfg
 
-        self.agent = human_player.Agent(name=f'{cfg.algorithm.name}_{cfg.test}', action_space=self.env.action_space, cfg=cfg)
+        self.agent = human_player.Agent(name=f'{cfg.agent.name}_{cfg.test}', action_space=self.env.action_space, cfg=cfg)
         # actor_cfg, critic_cfg = agent_setup.config_agent(cfg)
         # self.agent, _ = agent_setup.create_agent(cfg, actor_cfg, critic_cfg, cfg.agent.action_cfg, self.obs_space)
         print(self.env.action_space)
@@ -136,7 +136,7 @@ def main(cfg : DictConfig):
 
     folder = work_dir / cfg.models_dir
     if folder.exists():
-        print(f'Experiment for {cfg.algorithm.name}_{cfg.test} with seed {cfg.seed} seems to already exist at {cfg.models_dir}')
+        print(f'Experiment for {cfg.agent.name}_{cfg.test} with seed {cfg.seed} seems to already exist at {cfg.models_dir}')
         if cfg.overwrite_trajectories:
             print('\n Overwrite mode is on. Are you sure you want to do it?')
             answer = input('Answer: [y]/n \n')

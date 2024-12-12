@@ -1,7 +1,7 @@
 defaults:
     - _self_
     - environment
-    - sac
+    - agent: sac
     
 # Experiment level parameters
 experiment_type: State-Vis-Pretraining

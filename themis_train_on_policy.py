@@ -34,7 +34,7 @@ class Workspace(object):
             save_tb=cfg.log_save_tb,
             seed=cfg.seed,
             log_frequency=cfg.log_frequency,
-            agent=cfg.algorithm.name)
+            agent=cfg.agent.name)
 
         utils.set_seed_everywhere(cfg.seed)
         self.device = torch.device(cfg.device)
@@ -193,7 +193,7 @@ def main(cfg : DictConfig):
     
     folder = work_dir / cfg.models_dir
     # if folder.exists():
-    #     print(f'Experiment for {cfg.algorithm.name}_{cfg.test} with seed {cfg.seed} seems to already exist at {cfg.models_dir}')
+    #     print(f'Experiment for {cfg.agent.name}_{cfg.test} with seed {cfg.seed} seems to already exist at {cfg.models_dir}')
     #     # print('Pretraining abort...')
     #     # exit()
     #     print('\nDo you want to overwrite it?')

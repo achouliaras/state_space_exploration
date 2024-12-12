@@ -100,21 +100,21 @@ class ACModel(nn.Module):
         self.critic.log(logger,step)
 class PPO(Agent):
     """PPO algorithm."""
-    def __init__(self, obs_space, obs_dim, action_range, device,
+    def __init__(self, obs_space, obs_dim, action_type, device, architecture,
                  agent_cfg, action_cfg, mode=1, normalize_state_entropy=True):
         super().__init__()
 
         self.obs_space = obs_space
         self.obs_dim = obs_dim
-        self.action_scale = (action_range[1] - action_range[0]) /2.0
-        self.action_bias = (action_range[1] + action_range[0]) /2.0
+        self.action_type = action_type
         self.device = device
-        
-        self.state_type = agent_cfg.state_type
-        self.action_type = agent_cfg.action_type
-        self.architecture = agent_cfg.architecture
-        self.action_dim = agent_cfg.action_dim
+        self.architecture = architecture
 
+        self.state_type = agent_cfg.state_type
+        self.action_dim = agent_cfg.action_dim
+        self.action_scale = (agent_cfg.action_range[1] - agent_cfg.action_range[0]) /2.0
+        self.action_bias = (agent_cfg.action_range[1] + agent_cfg.action_range[0]) /2.0
+        
         self.num_update_steps = action_cfg.num_update_steps
         self.batch_size = action_cfg.batch_size
         self.lr = action_cfg.actor_lr

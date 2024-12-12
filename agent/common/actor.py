@@ -38,11 +38,11 @@ class SimpleActor(nn.Module):
         super().__init__()
         self.action_type = action_type
         
-        if self.architecture == 'Continuous':
+        if self.action_type == 'Continuous':
             self.actor_mean = utils.mlp(np.array(input_dim).prod(), np.prod(output_dim), 
                                    hidden_depth, hidden_dim, activation=nn.Tanh)
             self.actor_logstd = nn.Parameter(torch.zeros(1, np.prod(output_dim)))  
-        elif self.architecture == 'Discrete':
+        elif self.action_type == 'Discrete':
             self.actor = utils.mlp(np.array(input_dim).prod(), np.prod(output_dim), 
                                    hidden_depth, hidden_dim, activation=nn.ReLU)
         else:
@@ -87,7 +87,7 @@ class CategoricalActor(nn.Module):
         self.architecture = architecture
         
         #print(obs_space.shape[0]) # Needs reshape to 3,7,7
-        if architecture =='CNN':
+        if 'CNN' in architecture:
             self.cnn, self.flatten = utils.cnn(obs_space, obs_dim[0], mode=mode)
             obs_dim = self.flatten
             
@@ -97,7 +97,7 @@ class CategoricalActor(nn.Module):
         #self.apply(utils.weight_init)
 
     def forward(self, obs):
-        if self.architecture =='CNN':
+        if 'CNN' in self.architecture:
             x = self.trunk(self.cnn(obs.permute(0, 1, 2, 3)))
         else:
             x = self.trunk(obs)
@@ -110,7 +110,7 @@ class CategoricalActor(nn.Module):
         for k, v in self.outputs.items():
             logger.log_histogram(f'train_actor/{k}_hist', v, step)
 
-        if self.architecture == 'CNN':
+        if 'CNN' in self.architecture:
             for l, n in enumerate(self.cnn):
                 if type(n) == nn.Conv2d:
                     logger.log_param(f'train_actor/conv{l}', n, step)
