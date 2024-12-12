@@ -1,8 +1,16 @@
 defaults:
     - _self_
     - environment
-    - sac
+
+algorithm:
+    name: SAC
+
+condition: ${algorithm.name} == 'SAC'
+optional: sac
     
+condition: ${algorithm.name} == 'PPO'
+optional: ppo
+
 # Experiment level parameters
 experiment_type: State-Vis-Pretraining
 test: PEBBLE

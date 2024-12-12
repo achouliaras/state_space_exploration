@@ -1,6 +1,3 @@
-algorithm:
-  name: PPO
-
 agent:
   #_target_: agent.ppo.PPOAgent
   obs_shape: Null # to be specified on execution

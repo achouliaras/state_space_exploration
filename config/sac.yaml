@@ -1,6 +1,3 @@
-algorithm:
-  name: SAC
-
 agent:
   #_target_: agent.sac.SACAgent
   obs_shape: Null # to be specified on execution

@@ -1,7 +1,12 @@
 defaults:
     - _self_
     - environment
-    - ppo
+
+algorithm:
+    name: PPO
+
+condition: ${algorithm.name} == 'PPO'
+optional: ppo
     
 # Experiment level parameters
 experiment_type: State-Vis-Pretraining
