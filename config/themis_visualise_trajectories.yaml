@@ -1,12 +1,7 @@
 defaults:
     - _self_
     - environment
-
-algorithm:
-    name: SAC
-
-condition: ${algorithm.name} == 'SAC'
-optional: sac
+    - sac
     
 # Experiment level parameters
 experiment_type: State-Vis-Pretraining
