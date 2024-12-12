@@ -175,7 +175,7 @@ class Workspace(object):
         agent_setup.save_agent(self.agent, self.replay_buffer, payload, self.work_dir, self.cfg, self.global_step)
         print('SAVING COMPLETED')
         
-@hydra.main(version_base=None, config_path="config", config_name='themis_pretrain')
+@hydra.main(version_base=None, config_path="config", config_name='themis_online_pretrain_off_policy')
 def main(cfg : DictConfig):
     work_dir = Path.cwd()
     # cfg.output_dir = work_dir / cfg.output_dir  
