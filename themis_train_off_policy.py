@@ -47,6 +47,7 @@ class Workspace(object):
         self.agent, self.replay_buffer = agent_setup.create_agent(cfg, actor_cfg, critic_cfg, cfg.agent.action_cfg, self.obs_space)
         
         # Load AGENT
+        self.agent, _ = agent_setup.load_agent(self.work_dir, self.cfg, self.agent)
 
         # for logging
         self.total_feedback = 0
@@ -132,16 +133,19 @@ class Workspace(object):
             true_episode_reward += reward
 
             # Training Update
-            if global_step >= self.cfg.num_seed_steps + self.cfg.num_unsup_steps:
+            if global_step > self.cfg.num_seed_steps + self.cfg.num_unsup_steps:
                 self.agent.update(self.replay_buffer, self.logger, global_step, 
                                   self.cfg.num_train_steps, gradient_update=1)
-                
-            elif global_step == self.cfg.num_seed_steps + self.cfg.num_unsup_steps-1: 
+            
+            elif global_step == self.cfg.num_seed_steps + self.cfg.num_unsup_steps: 
                 obs, _ = self.env.reset()
                 # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
                                 
                 self.episode = 0
                 true_episode_reward = 0
+                self.agent.reset_critic()
+                self.agent.update_after_reset(self.replay_buffer, self.logger, global_step, 
+                                              self.cfg.num_train_steps, gradient_update=1)
                 print('TRAINING STARTS')
             
             
@@ -180,15 +184,15 @@ def main(cfg : DictConfig):
     # cfg.output_dir = work_dir / cfg.output_dir  
     
     folder = work_dir / cfg.models_dir
-    if folder.exists():
-        print(f'Experiment for {cfg.algorithm.name}_{cfg.test} with seed {cfg.seed} seems to already exist at {cfg.models_dir}')
-        # print('Pretraining abort...')
-        # exit()
-        print('\nDo you want to overwrite it?')
-        answer = input('Answer: [y]/n \n')
-        while answer not in ['', 'y', 'Y', 'yes', 'Yes','n', 'Y','no','No'] :  
-            answer = input('Answer: [y]/n \n')
-        if answer in ['n','no','No']: exit()
+    # if folder.exists():
+    #     print(f'Experiment for {cfg.algorithm.name}_{cfg.test} with seed {cfg.seed} seems to already exist at {cfg.models_dir}')
+    #     # print('Pretraining abort...')
+    #     # exit()
+    #     print('\nDo you want to overwrite it?')
+    #     answer = input('Answer: [y]/n \n')
+    #     while answer not in ['', 'y', 'Y', 'yes', 'Yes','n', 'Y','no','No'] :  
+    #         answer = input('Answer: [y]/n \n')
+    #     if answer in ['n','no','No']: exit()
     os.makedirs(folder, exist_ok=True)
     # cfg.models_dir = work_dir / cfg.models_dir 
     workspace = Workspace(cfg, work_dir)

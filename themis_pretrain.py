@@ -128,7 +128,7 @@ class Workspace(object):
 
             # Pre-Training Update
             if global_step >= self.cfg.num_seed_steps:
-                self.agent.update_state_ent(self.replay_buffer, self.logger, 
+                self.agent.pretrain_update(self.replay_buffer, self.logger, 
                                             global_step, self.cfg.num_train_steps, 
                                             gradient_update=1, K=self.cfg.topK)
             elif global_step == self.cfg.num_seed_steps-1: 

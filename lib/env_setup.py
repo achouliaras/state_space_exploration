@@ -110,10 +110,10 @@ def make_env(cfg, render_mode=None):
         else:
             env = gym.make(id=id, render_mode=render_mode) 
         
-        # env = PositionBonus(env)
+        
         env = minigrid.wrappers.FullyObsWrapper(env)
         env = minigrid.wrappers.ImgObsWrapper(env)
-        
+        env = gym.wrappers.RecordEpisodeStatistics(env, buffer_length=cfg.max_episode_steps)
         if cfg.save_video:
             env, cfg = record_video_wrap(env, cfg)
 

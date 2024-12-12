@@ -32,6 +32,53 @@ class DiagGaussianActor(nn.Module):
             if type(m) == nn.Linear:
                 logger.log_param(f'train_actor/fc{i}', m, step)
 
+class SimpleActor(nn.Module):
+    """torch.distributions implementation of a categorical policy for discrete environments."""
+    def __init__(self, input_dim, output_dim, action_type, hidden_depth, hidden_dim, mode=0):
+        super().__init__()
+        self.action_type = action_type
+        
+        if self.architecture == 'Continuous':
+            self.actor_mean = utils.mlp(np.array(input_dim).prod(), np.prod(output_dim), 
+                                   hidden_depth, hidden_dim, activation=nn.Tanh)
+            self.actor_logstd = nn.Parameter(torch.zeros(1, np.prod(output_dim)))  
+        elif self.architecture == 'Discrete':
+            self.actor = utils.mlp(np.array(input_dim).prod(), np.prod(output_dim), 
+                                   hidden_depth, hidden_dim, activation=nn.ReLU)
+        else:
+            raise NotImplementedError
+        
+        self.outputs = dict()
+        
+    def forward(self, embedding):
+        if self.action_type == 'Continuous':
+            x_mean = self.actor_mean(embedding)
+            x_logstd = self.actor_logstd.expand_as(x_mean)
+            return x_mean, x_logstd
+        elif self.action_type == 'Discrete':
+            x = self.actor(embedding)
+            return x
+        else:
+            raise NotImplementedError
+        
+    def log(self, logger, step):
+        for k, v in self.outputs.items():
+            logger.log_histogram(f'train_actor/{k}_hist', v, step)
+
+        if self.action_type == 'Continuous':
+            for l, n in enumerate(self.actor_mean):
+                if type(n) == nn.Linear:
+                    logger.log_param(f'train_actor/mean_fc{l}', n, step)
+            for l, n in enumerate(self.actor_logstd):
+                if type(n) == nn.Linear:
+                    logger.log_param(f'train_actor/logstd_fc{l}', n, step)
+        elif self.action_type == 'Discrete':
+            for l, n in enumerate(self.actor):
+                if type(n) == nn.Linear:
+                    logger.log_param(f'train_actor/fc{l}', n, step)
+        else:
+            raise NotImplementedError
+
 class CategoricalActor(nn.Module):
     """torch.distributions implementation of a categorical policy for discrete environments."""
     def __init__(self, obs_space, obs_dim, action_dim, architecture, hidden_dim, hidden_depth, mode=0):

@@ -1,6 +1,54 @@
+import numpy as np
 import torch
 import agent.common.utils as utils
 from torch import nn
+
+class SimpleCritic(nn.Module):
+    """torch.distributions implementation of a categorical policy for discrete environments."""
+    def __init__(self, input_dim, output_dim, action_type, hidden_depth, hidden_dim, mode=0):
+        super().__init__()
+        self.action_type = action_type
+        
+        if self.architecture == 'Continuous':
+            self.actor_mean = utils.mlp(np.array(input_dim).prod(), np.prod(output_dim), 
+                                   hidden_depth, hidden_dim, activation=nn.Tanh)
+            
+        elif self.architecture == 'Discrete':
+            self.actor = utils.mlp(np.array(input_dim).prod(), np.prod(output_dim), 
+                                   hidden_depth, hidden_dim, activation=nn.ReLU)
+        else:
+            raise NotImplementedError
+        
+        self.outputs = dict()
+        
+    def forward(self, embedding):
+        if self.action_type == 'Continuous':
+            x_mean = self.actor_mean(embedding)
+            x_logstd = self.actor_logstd.expand_as(x_mean)
+            return x_mean, x_logstd
+        elif self.action_type == 'Discrete':
+            x = self.actor(embedding)
+            return x
+        else:
+            raise NotImplementedError
+        
+    def log(self, logger, step):
+        for k, v in self.outputs.items():
+            logger.log_histogram(f'train_actor/{k}_hist', v, step)
+
+        if self.action_type == 'Continuous':
+            for l, n in enumerate(self.actor_mean):
+                if type(n) == nn.Linear:
+                    logger.log_param(f'train_actor/mean_fc{l}', n, step)
+            for l, n in enumerate(self.actor_logstd):
+                if type(n) == nn.Linear:
+                    logger.log_param(f'train_actor/logstd_fc{l}', n, step)
+        elif self.action_type == 'Discrete':
+            for l, n in enumerate(self.actor):
+                if type(n) == nn.Linear:
+                    logger.log_param(f'train_actor/fc{l}', n, step)
+        else:
+            raise NotImplementedError
 
 class DoubleQCritic(nn.Module):
     """Critic network, employes double Q-learning."""

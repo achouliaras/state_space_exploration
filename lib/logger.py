@@ -13,7 +13,8 @@ COMMON_TRAIN_FORMAT = [
     ('episode', 'Eps', 'int'),
     ('step', 'Step', 'int'),
     ('episode_reward', 'R', 'float'),
-    ('true_episode_reward', 'TR', 'float'), 
+    ('true_episode_reward', 'TR', 'float'),
+    ('episode_length', 'EL', 'int'), 
     #('total_feedback', 'TF', 'int'),
     #('labeled_feedback', 'LR', 'int'),
     #('noisy_feedback', 'NR', 'int'),
@@ -42,6 +43,13 @@ AGENT_TRAIN_FORMAT = {
     ],
     'PPO': [
         ('batch_reward', 'BR', 'float'),
+        ('explained_variance', 'EVAR', 'float'),
+        ('approx_kl', 'KLDIV', 'float'),
+        ('learning_rate', 'LR', 'float'),
+        ('clipfrac', 'CLIPFR', 'float'),
+        ('actor_loss', 'ALOSS', 'float'),
+        ('actor_entropy', 'AENTR', 'float'),
+        ('critic_loss', 'CLOSS', 'float'),
     ],
     'HUMAN': [
         ('batch_reward', 'BR', 'float'),
