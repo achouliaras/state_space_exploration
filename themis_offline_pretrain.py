@@ -24,6 +24,12 @@ import hydra
 from omegaconf import DictConfig
 from termcolor import colored
 
+# Interact with environment for data generation or Load data if generate trajectories works
+# Representation Learning
+# Imitation Learning
+# Skill Extraction
+# Save resulting agent
+
 class Workspace(object):
     def __init__(self, cfg, work_dir):
         print(colored('EXECUTING PRETRAINING', 'green'))
@@ -126,22 +132,22 @@ class Workspace(object):
             obs = next_obs
             true_episode_reward += reward
 
-            # Pre-Training Update
-            if global_step >= self.cfg.num_seed_steps:
-                self.agent.pretrain_update(self.replay_buffer, self.logger, 
-                                            global_step, self.cfg.num_train_steps, 
-                                            gradient_update=1, K=self.cfg.topK)
-            elif global_step == self.cfg.num_seed_steps-1: 
-                obs, _ = self.env.reset()
-                obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
-                                
-                self.episode = 0
-                true_episode_reward = 0
-                print('PRETRAINING STARTS')
-            
-            
-            if self.cfg.log_success:
-                episode_success = max(episode_success, terminated)
+        # Pre-Training Update
+        if global_step >= self.cfg.num_seed_steps:
+            self.agent.pretrain_update(self.replay_buffer, self.logger, 
+                                        global_step, self.cfg.num_train_steps, 
+                                        gradient_update=1, K=self.cfg.topK)
+        elif global_step == self.cfg.num_seed_steps-1: 
+            obs, _ = self.env.reset()
+            obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
+                            
+            self.episode = 0
+            true_episode_reward = 0
+            print('PRETRAINING STARTS')
+        
+        
+        if self.cfg.log_success:
+            episode_success = max(episode_success, terminated)
 
         episode_time = time.time() - start_time
         total_time += episode_time
