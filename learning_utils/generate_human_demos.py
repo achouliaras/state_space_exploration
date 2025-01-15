@@ -12,16 +12,14 @@ import time
 import pickle as pkl
 from tqdm import tqdm
 import copy
-
-from lib.logger import Logger
-from collections import deque
-
-import lib.env_setup as env_setup
-import lib.utils as utils
-import lib.human_player as human_player
-from lib.trajectory_io import TrajectoryProcessor
 import hydra
 from omegaconf import DictConfig
+
+from lib.logger import Logger
+from lib.trajectory_io import TrajectoryProcessor
+from lib.human_player import human_player
+from lib import env_setup
+from lib import utils
 
 class Workspace(object):
     def __init__(self, cfg, work_dir):
@@ -128,7 +126,7 @@ class Workspace(object):
         self.logger.dump(self.global_step, ty='eval')
         self.logger.close()
         
-@hydra.main(version_base=None, config_path="config", config_name='themis_generate_trajectories')
+@hydra.main(version_base=None, config_path="../config", config_name='themis_generate_trajectories')
 def main(cfg : DictConfig):
     work_dir = Path.cwd()
     # cfg.output_dir = work_dir / cfg.output_dir  
