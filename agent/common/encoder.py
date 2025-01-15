@@ -4,25 +4,26 @@ import agent.common.utils as utils
 from torch import nn
 
 class Encoder(nn.Module):
-    def __init__(self, obs_space, obs_dim, architecture, mode=0):
+    def __init__(self, obs_shape, latent_dim, architecture, mode=0):
         super().__init__()
-        self.obs_space = obs_space
+        self.c, *self.obs_size = obs_shape
         self.architecture = architecture
-        self.image_embedding_size = None
+        self.image_embedding_size = latent_dim
 
         if 'CNN' in architecture:
-            self.cnn, self.n_flatten = utils.cnn(obs_space, obs_dim[0], mode=mode)
-            self.image_embedding_size = self.flatten
+            self.cnn = utils.cnn(self.obs_size, self.c, latent_dim, mode=mode)
         else:
             # flatten
             self.image_embedding_size = 512
-            self.mlp = utils.mlp(input_dim=np.array(self.obs_dim).prod(), output_dim=self.image_embedding_size, 
-                                 hidden_depth=0, activation=nn.ReLU)
+            self.mlp = utils.mlp(input_dim=np.array(obs_shape).prod(), 
+                                 output_dim=latent_dim, 
+                                 hidden_depth=1, 
+                                 activation=nn.ReLU)
 
         if 'LSTM' in architecture:
             self.memory_module = utils.lstm(self.image_embedding_size, self.semi_memory_size)
-            
-        self.embedding_size = self.semi_memory_size
+
+        self.outputs = dict()
 
     @property
     def memory_size(self):
@@ -31,17 +32,24 @@ class Encoder(nn.Module):
     @property
     def semi_memory_size(self):
         return self.image_embedding_size
+
+    @property
+    def embedding_size(self):
+        return self.semi_memory_size
     
     def forward(self, obs, memory):
         x = obs.permute(0, 1, 2, 3)
-
+        
+        # print(f'input: {x[0]}')
         if 'CNN' in self.architecture:
+            # print('Obs shape ', x[0].shape)
             x = self.cnn(x)
         else:
-            x = self.mlp(x)
-             
-        x = x.reshape(x.shape[0], -1)
-
+            x = self.mlp(x) # CHECK ISSUE 
+            # print('MLP')
+        # print(f'output: {x[0]}')
+        # x = x.reshape(x.shape[0], -1)
+        
         if 'LSTM' in self.architecture:
             hidden = (memory[:, :self.semi_memory_size], memory[:, self.semi_memory_size:])
             hidden = self.memory_module(x, hidden)
@@ -49,24 +57,50 @@ class Encoder(nn.Module):
             memory = torch.cat(hidden, dim=1)
         else:
             embedding = x
-            memory = None
         
         return embedding, memory
 
     def log(self, logger, step):
         for k, v in self.outputs.items():
-            logger.log_histogram(f'train/{k}_hist', v, step)
+            logger.log_histogram(f'train_encoder/{k}_hist', v, step)
 
         if 'CNN' in self.architecture:
             for l, n in enumerate(self.cnn):
                 if type(n) == nn.Conv2d:
-                    logger.log_param(f'train/conv{l}', n, step)
+                    logger.log_param(f'train_encoder/conv{l}', n, step)
         else:
             for l, n in enumerate(self.mlp):
                 if type(n) == nn.Linear:
-                    logger.log_param(f'train/fc{l}', n, step)
+                    logger.log_param(f'train_encoder/fc{l}', n, step)
 
         if 'LSTM' in self.architecture:
-            for i, m in enumerate(self.memory_module):
-                if type(m) == nn.Linear:
-                    logger.log_param(f'train/lstm{i}', m, step)
+            # for i, m in enumerate(self.memory_module):
+            #     if type(m) == nn.LSTMCell:
+            # logger.log_param(f'train/lstm', self.memory_module, step)
+            pass
+
+    
+# Autoencoder Model
+class Autoencoder(nn.Module):
+    def __init__(self, obs_shape, latent_dim, architecture, mode):
+        super().__init__()
+        self.c, *self.obs_size = obs_shape
+
+        if 'CNN' in architecture:
+            self.encoder = utils.cnn(self.obs_size, self.c, latent_dim, mode=mode)
+            self.decoder = utils.de_cnn(self.obs_size, self.c, latent_dim, mode=mode)
+        else:
+            self.encoder = utils.mlp(input_dim=np.array(obs_shape).prod(), 
+                                     output_dim=latent_dim, 
+                                     hidden_depth=1, 
+                                     activation=nn.ReLU)
+            self.decoder = utils.mlp(input_dim=latent_dim, 
+                                     output_dim=np.array(obs_shape).prod(),
+                                     hidden_depth=1, 
+                                     activation=nn.ReLU, 
+                                     output_mod=[nn.Sigmoid(),nn.Unflatten(1, obs_shape)])
+
+    def forward(self, obs):
+        z = self.encoder(obs)
+        x = self.decoder(z)
+        return z, x 

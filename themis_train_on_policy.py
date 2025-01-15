@@ -45,23 +45,26 @@ class Workspace(object):
         self.num_update_steps = self.cfg.agent.action_cfg.num_update_steps
         self.batch_size =  int(self.num_update_steps) # x num_of_envs
         self.cfg.agent.action_cfg.batch_size = self.batch_size
-        self.num_iterations = (self.cfg.num_train_steps+1) // self.batch_size
-
-        actor_cfg, critic_cfg = agent_setup.config_agent(cfg)
-
-        self.agent, self.replay_buffer = agent_setup.create_agent(cfg, actor_cfg, critic_cfg, cfg.agent.action_cfg, self.obs_space)
+        self.num_iterations = int((self.cfg.num_train_steps+1) // self.batch_size)
+        self.agent = agent_setup.create_agent(cfg)
         
         # Load AGENT
-        self.agent, _ = agent_setup.load_agent(self.work_dir, self.cfg, self.agent)
-        self.agent.reset_critic()
+        # self.agent, _ = agent_setup.load_agent(self.work_dir, self.cfg, self.agent)
+        # self.agent.reset_critic()
 
         # If you add parallel envs adjust size
-        self.obs = np.zeros(self.num_update_steps + self.obs_space.shape)
-        self.actions = np.zeros(self.num_update_steps + self.actor_cfg.action_dim)
-        self.logprobs = np.zeros(self.num_update_steps)
-        self.rewards = np.zeros(self.num_update_steps)
-        self.dones = np.zeros(self.num_update_steps)
-        self.values = np.zeros(self.num_update_steps)
+        self.obs = np.zeros((self.num_update_steps, 1) + self.obs_space.shape)
+        print(self.obs.shape)
+        self.actions = np.zeros((self.num_update_steps, 1) + self.cfg.action_space)
+        print(self.actions.shape)
+        self.logprobs = np.zeros((self.num_update_steps, 1))
+        self.rewards = np.zeros((self.num_update_steps, 1))
+        self.dones = np.zeros((self.num_update_steps, 1))
+        self.values = np.zeros((self.num_update_steps, 1))
+        self.memories = None
+        if self.agent.has_memory:
+            self.memories = np.zeros((self.num_update_steps, 1) + self.agent.memory_size)
+            print(self.memories.shape)
 
         # for logging
         self.total_feedback = 0
@@ -96,37 +99,60 @@ class Workspace(object):
         total_time=0
         start_time = time.time()
 
-        next_obs, _ = self.env.reset(seed = self.cfg.seed)
-        # next_obs, _ = self.env.reset()
-        # next_obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
-        next_done = 0 
+        obs, _ = self.env.reset(seed = self.cfg.seed)
+        # obs, _ = self.env.reset()
+        # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
+        done = 0 
+        if self.agent.has_memory:
+            memory = np.zeros(self.agent.memory_size)
 
         print('TRAINING STARTS')
         for iteration in range(1, self.num_iterations+1):
             # Annealing the rate if instructed to do so.
-            if self.cfg.agent.anneal_lr:
+            if self.agent.anneal_lr:
                 frac = 1.0 - (iteration - 1.0) / self.num_iterations
-                lrnow = frac * self.cfg.agent.action_cfg.actor_lr
-                self.agent.actor_optimizer.param_groups[0]["lr"] = lrnow
+                lrnow = frac * self.agent.lr
+                self.agent.optimizer.param_groups[0]["lr"] = lrnow
                 
             for step in range(self.num_update_steps):
-                self.global_step += 1 # or num of envs
-                self.obs[step] = next_obs
-                self.dones[step] = next_done
+                global_step += 1 # or num of envs
+                self.obs[step] = obs
+                self.dones[step] = done
+                if self.agent.has_memory:
+                    self.memories[step] = memory
 
                 # Action logic
                 with torch.no_grad():
-                    action, logprob, _, value = self.agent.get_action(torch.FloatTensor(next_obs).to(self.device).unsqueeze(0))
+                    if self.agent.has_memory:
+                        obs_tensor = torch.FloatTensor(obs).to(self.device).unsqueeze(0)
+                        memory_tensor = torch.FloatTensor(memory).to(self.device).unsqueeze(0)
+                        mask_tensor = torch.FloatTensor(1-done).to(self.device).unsqueeze(0)
+                        # print(memory_tensor.shape)
+                        # print(mask_tensor.shape)
+                        action, logprob, _, value, memory = self.agent.get_action(obs=obs_tensor,
+                                                                          action=None,
+                                                                          memory=memory_tensor * mask_tensor)
+                        memory = memory.detach().cpu().numpy()[0]
+                    else:
+                        action, logprob, _, value, _ = self.agent.get_action(torch.FloatTensor(obs).to(self.device).unsqueeze(0))
                 action = action.detach().cpu().numpy()[0]
+                
                 self.actions[step] = action
                 self.logprobs[step] = logprob.detach().cpu().numpy()[0]
                 self.values[step] = value.detach().cpu().numpy()[0]
-                print(action)
+
+                # print(f"Iter: {iteration} Step: {step}, action: {action}")
 
                 # execute step and log data
                 next_obs, reward, terminated, truncated, info = self.env.step(action)
                 next_done = terminated or truncated
+                next_memory = None
+                if self.agent.has_memory:
+                    next_memory = memory
                 self.rewards[step] = reward
+                obs = next_obs
+                done = next_done
+                memory = next_memory
                 
                 if terminated or truncated:
                     episode_time = time.time() - start_time
@@ -149,14 +175,18 @@ class Workspace(object):
                         episode_success = 0
                     self.step = step
                     self.episode += 1
-                    next_obs, _ = self.env.reset()
-                    # next_obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
-                    next_done = 0 
+                    obs, _ = self.env.reset()
+                    # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
+                    done = 0 
+                    if self.agent.has_memory:
+                        memory = np.zeros(self.agent.memory_size)
 
             # Training Update 
             # if global_step % self.num_update_steps == 0:
-            self.agent.update([self.obs, self.actions, self.logprobs, self.values, self.rewards, self.dones], 
-                              [next_obs, next_done], self.logger, global_step)
+            # print('Actions: ',[i[0][0] for i in self.actions])
+            # print([i[0] for i in self.rewards])
+            self.agent.update([self.obs, self.actions, self.logprobs, self.values, self.rewards, self.dones, self.memories], 
+                              [next_obs, next_done, next_memory], self.logger, global_step)
             
             if self.cfg.log_success:
                 episode_success = max(episode_success, terminated)
@@ -172,6 +202,7 @@ class Workspace(object):
         if self.cfg.log_success:
             self.logger.log('train/episode_success', episode_success, global_step)
             self.logger.log('train/true_episode_success', episode_success, global_step)
+
         self.logger.dump(global_step, ty='train')
         self.env.close()
         print('TRAINING FINISHED')
@@ -186,21 +217,21 @@ class Workspace(object):
         agent_setup.save_agent(self.agent, self.replay_buffer, payload, self.work_dir, self.cfg, self.global_step)
         print('SAVING COMPLETED')
         
-@hydra.main(version_base=None, config_path="config", config_name='themis_train_off_policy')
+@hydra.main(version_base=None, config_path="config", config_name='themis_train_on_policy')
 def main(cfg : DictConfig):
     work_dir = Path.cwd()
     # cfg.output_dir = work_dir / cfg.output_dir  
     
     folder = work_dir / cfg.models_dir
-    # if folder.exists():
-    #     print(f'Experiment for {cfg.agent.name}_{cfg.test} with seed {cfg.seed} seems to already exist at {cfg.models_dir}')
+    if folder.exists():
+        print(f'Experiment for {cfg.agent.name}_{cfg.test} with seed {cfg.seed} seems to already exist at {cfg.models_dir}')
     #     # print('Pretraining abort...')
     #     # exit()
-    #     print('\nDo you want to overwrite it?')
-    #     answer = input('Answer: [y]/n \n')
-    #     while answer not in ['', 'y', 'Y', 'yes', 'Yes','n', 'Y','no','No'] :  
-    #         answer = input('Answer: [y]/n \n')
-    #     if answer in ['n','no','No']: exit()
+        print('\nDo you want to overwrite it?')
+        answer = input('Answer: [y]/n \n')
+        while answer not in ['', 'y', 'Y', 'yes', 'Yes','n', 'Y','no','No'] :  
+            answer = input('Answer: [y]/n \n')
+        if answer in ['n','no','No']: exit()
     os.makedirs(folder, exist_ok=True)
     # cfg.models_dir = work_dir / cfg.models_dir 
     workspace = Workspace(cfg, work_dir)

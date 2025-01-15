@@ -1,5 +1,6 @@
 
 import pygame
+import time
 
 pygame.init()
 
@@ -25,19 +26,22 @@ class Agent:
         """
         action = 0
         
-        # while(True):
         pygame.event.clear()
         pressed = pygame.key.get_pressed()
         if pressed[pygame.K_SPACE]:
             action = 1
         elif pressed[pygame.K_w]:
-            action = 5
-        elif pressed[pygame.K_a]:
-            action = 3
-        elif pressed[pygame.K_s]:
-            action = 4
-        elif pressed[pygame.K_d]:
             action = 2
+        elif pressed[pygame.K_a]:
+            action = 4
+        elif pressed[pygame.K_s]:
+            action = 5
+        elif pressed[pygame.K_d]:
+            action = 3
+        elif pressed[pygame.K_e]:
+            action = 14
+        elif pressed[pygame.K_q]:
+            action = 15
         if self.action_space.contains(action): return action
         print('Wrong Action')
         return 0

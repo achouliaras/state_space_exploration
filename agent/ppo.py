@@ -9,15 +9,13 @@ from agent.common.encoder import Encoder
 from agent.common.critic import DoubleQCritic, SimpleCritic
 from agent.common.actor import DiagGaussianActor, CategoricalActor, SimpleActor
 
-
 class ACModel(nn.Module):
-    def __init__(self,obs_space, obs_dim, action_dim, action_type, architecture, mode):
+    def __init__(self, obs_dim, action_dim, action_type, latent_dim, architecture, mode):
         super().__init__()
-        
-        self.obs_space = obs_space
         self.obs_dim = obs_dim
         self.action_dim = action_dim
         self.action_type = action_type
+        self.latent_dim = latent_dim
         self.architecture = architecture
         self.mode = mode
 
@@ -27,8 +25,8 @@ class ACModel(nn.Module):
 
     def create_network(self):
         # CNN, MLP, LSTM
-        network = Encoder(obs_space=self.obs_space,
-                          obs_dim=self.obs_dim,
+        network = Encoder(obs_shape=self.obs_dim,
+                          latent_dim=self.latent_dim,
                           architecture=self.architecture,
                           mode=self.mode)
         return network
@@ -45,7 +43,8 @@ class ACModel(nn.Module):
             critic = SimpleCritic(input_dim=self.network.embedding_size,
                                   output_dim=1,
                                   action_type=self.action_type,
-                                  hidden_depth=0
+                                  hidden_depth=0,
+                                  hidden_dim=0
                                   )
         else:
             raise NotImplementedError
@@ -63,7 +62,8 @@ class ACModel(nn.Module):
             actor = SimpleActor(input_dim=self.network.embedding_size,
                                 output_dim=self.action_dim,
                                 action_type=self.action_type,
-                                hidden_depth=0
+                                hidden_depth=0,
+                                hidden_dim=0
                                 )
         else:
             raise NotImplementedError
@@ -84,9 +84,9 @@ class ACModel(nn.Module):
         self.actor.train(training)
         self.critic.train(training)
     
-    def forward(self, obs, memory):
+    def forward(self, obs, memory = None):
         if self.action_type == 'Continuous':
-            x, memory = obs, None
+            x = obs
         elif self.action_type == 'Discrete':
             x, memory = self.network(obs, memory)
         logits = self.actor(x)
@@ -98,26 +98,26 @@ class ACModel(nn.Module):
         self.network.log(logger,step)
         self.actor.log(logger,step)
         self.critic.log(logger,step)
+
 class PPO(Agent):
     """PPO algorithm."""
-    def __init__(self, obs_space, obs_dim, action_type, device, architecture,
+    def __init__(self, obs_dim, action_type, device, latent_dim, architecture, state_type,
                  agent_cfg, action_cfg, mode=1, normalize_state_entropy=True):
         super().__init__()
-
-        self.obs_space = obs_space
         self.obs_dim = obs_dim
         self.action_type = action_type
         self.device = device
+        self.latent_dim = latent_dim
         self.architecture = architecture
 
-        self.state_type = agent_cfg.state_type
+        self.state_type = state_type
         self.action_dim = agent_cfg.action_dim
         self.action_scale = (agent_cfg.action_range[1] - agent_cfg.action_range[0]) /2.0
         self.action_bias = (agent_cfg.action_range[1] + agent_cfg.action_range[0]) /2.0
         
         self.num_update_steps = action_cfg.num_update_steps
         self.batch_size = action_cfg.batch_size
-        self.lr = action_cfg.actor_lr
+        self.lr = action_cfg.lr
         self.anneal_lr = action_cfg.anneal_lr
         self.discount = action_cfg.discount
         self.gae_lambda = action_cfg.gae_lambda
@@ -129,24 +129,36 @@ class PPO(Agent):
         self.ent_coef = action_cfg.ent_coef
         self.vf_coef = action_cfg.vf_coef
         self.max_grad_norm = action_cfg.max_grad_norm
-        self.target_kl = action_cfg.target_kl
-
-        self.minibatch_size = int(self.batch_size // self.num_minibatches)
+        self.target_kl = None if action_cfg.target_kl == 'None' else action_cfg.target_kl
         
         self.s_ent_stats = pebble.TorchRunningMeanStd(shape=[1], device=self.device)
         self.normalize_state_entropy = normalize_state_entropy
         
-        self.acmodel = ACModel(obs_space=self.obs_space,
-                               obs_dim=self.obs_dim,
+        self.has_memory = False
+        self.sequence_length = 1
+        if 'LSTM' in architecture: 
+            self.has_memory = True
+            self.sequence_length = 4 # CHECK
+
+        self.minibatch_size =  int(self.batch_size // self.num_minibatches)
+        self.batch_size_of_sequences = int(self.minibatch_size // self.sequence_length)
+        
+        self.acmodel = ACModel(obs_dim=self.obs_dim,
                                action_dim=self.action_dim,
+                               action_type=self.action_type,
+                               latent_dim = self.latent_dim,
                                architecture=self.architecture,
                                mode=mode)
         
         # optimizers
-        self.optimizer = torch.optim.Adam(self.acmodel.parameters(), lr=self.lr, eps=1e-05) # CHECK
+        self.optimizer = torch.optim.Adam(self.acmodel.parameters(), lr=self.lr, eps=1e-08) # CHECK
         
         # change mode
         self.train()
+    
+    @property
+    def memory_size(self):
+        return (self.acmodel.network.memory_size,)
         
     def reset_actor_critic(self):
         # reset actor and critic
@@ -159,70 +171,22 @@ class PPO(Agent):
     def train(self, training=True):
         self.acmodel.train(training=training)
 
-    def get_action(self, obs, action = None):
+    def get_action(self, obs, action = None, memory = None):
         if self.action_type == 'Continuous':
-            (mean, log_std), state_value, memory = self.acmodel.forward(obs)
+            (mean, log_std), state_value, memory = self.acmodel.forward(obs, memory)
             std = torch.exp(log_std)
             dist = torch.distributions.Normal(mean, std)
             if action == None:
                 action = dist.sample()
-            return action, dist.log_prob(action).sum(1), dist.entropy().sum(1), state_value  
+            return action, dist.log_prob(action).sum(1), dist.entropy().sum(1), state_value, memory
         elif self.action_type == 'Discrete':
-            logits, state_value, memory = self.acmodel.forward(obs)
+            logits, state_value, memory = self.acmodel.forward(obs, memory)
             # Action is a flat integer
             dist = Categorical(logits=logits)
             if action == None:
                 action = dist.sample()
-            return action, dist.log_prob(action), dist.entropy(), state_value
 
-    def update_actor_and_critic(self, obs, actions, logprobs, values, returns, advantages,
-                      logger, step, print_flag=True):
-        _, newlogprob, entropy, newvalue = self.get_action(obs, actions)
-        logratio = newlogprob - logprobs
-        ratio = logratio.exp()
-
-        with torch.no_grad():
-            # calculate approx_kl http://joschu.net/blog/kl-approx.html
-            old_approx_kl = (-logratio).mean()
-            approx_kl = ((ratio - 1) - logratio).mean()
-            self.clipfracs += [((ratio - 1.0).abs() > self.clip_coef).float().mean().item()]
-
-        mb_advantages = advantages
-        if self.norm_adv:
-            mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
-
-        # Policy loss
-        pg_loss1 = -mb_advantages * ratio
-        pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - self.clip_coef, 1 + self.clip_coef)
-        actor_loss = torch.max(pg_loss1, pg_loss2).mean()
-
-        # Value loss
-        newvalue = newvalue.view(-1)
-        if self.clip_vloss:
-            v_loss_unclipped = (newvalue - returns) ** 2
-            v_clipped = values + torch.clamp(newvalue - values, -self.clip_coef, self.clip_coef)
-            v_loss_clipped = (v_clipped - returns) ** 2
-            v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
-            critic_loss = 0.5 * v_loss_max.mean()
-        else:
-            critic_loss = 0.5 * ((newvalue - returns) ** 2).mean()
-
-        entropy_loss = entropy.mean()
-        loss = actor_loss - self.ent_coef * entropy_loss + critic_loss * self.vf_coef
-
-        # Use action to take the suitable Q value
-        if print_flag:
-            logger.log('train_critic/loss', critic_loss, step)
-            logger.log('train_actor/loss', actor_loss, step)
-            logger.log('train_actor/entropy', entropy_loss, step)
-            
-        self.optimizer.zero_grad()
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.acmodel.parameters(), self.max_grad_norm)
-        self.optimizer.step()
-
-        self.acmodel.log(logger, step)
-        return approx_kl, old_approx_kl
+            return action, dist.log_prob(action), dist.entropy(), state_value, memory
         
     # UPDATE
     def update_critic_state_ent(
@@ -334,16 +298,26 @@ class PPO(Agent):
                     if self.action_type == 'Discrete': break # Do not update actor as in TD3 for Discrete environments
  
     def update(self, trajectory, next, logger, step):
-        obs, actions, logprobs, values, rewards, dones = trajectory
-        next_obs, next_done = next  
+        obs, actions, logprobs, values, rewards, dones, memories = trajectory
+        next_obs, next_done, next_memory = next  
 
         obs, actions = torch.Tensor(obs).to(self.device), torch.Tensor(actions).to(self.device)
         logprobs, values = torch.Tensor(logprobs).to(self.device), torch.Tensor(values).to(self.device)
         rewards, dones = torch.Tensor(rewards).to(self.device), torch.Tensor(dones).to(self.device)
-        next_obs, next_done = torch.Tensor(next_obs).to(self.device), torch.Tensor(next_done).to(self.device)       
+        if self.has_memory: 
+            memories = torch.Tensor(memories).to(self.device)
+        
+        next_obs = torch.Tensor(next_obs).to(self.device).unsqueeze(0)      
+        
+        if self.has_memory:
+            next_memory, next_mask = torch.Tensor(next_memory).to(self.device).unsqueeze(0), torch.Tensor([1-next_done]).to(self.device).unsqueeze(0)
 
         with torch.no_grad():
-            next_value = self.acmodel.critic(next_obs).reshape(1,-1)
+            if self.has_memory:
+                # print(next_mask)
+                _, next_value, _ = self.acmodel(next_obs, next_memory * next_mask)
+            else:
+                _, next_value, _ = self.acmodel(next_obs)
             advantages = torch.zeros_like(rewards).to(self.device)
             lastgaelam = 0
 
@@ -359,27 +333,126 @@ class PPO(Agent):
             returns = advantages + values
 
         # flatten the batch
-        b_obs = obs.reshape((-1,) + self.obs_dim)
+        b_obs = obs.reshape((-1,) + tuple(self.obs_dim))
         b_logprobs = logprobs.reshape(-1)
-        b_actions = actions.reshape((-1,) + self.actor_cfg.action_dim)
+        if self.action_type == 'Continuous':
+            b_actions = actions.reshape((-1,) + tuple(self.action_dim))
+        elif self.action_type == 'Discrete':
+            b_actions = actions.reshape((-1,1))
         b_advantages = advantages.reshape(-1)
         b_returns = returns.reshape(-1)
+        b_dones = dones.reshape(-1)
         b_values = values.reshape(-1)
+        if self.has_memory:
+            b_memories = memories.reshape((-1,) + tuple(self.memory_size))
         
-        b_inds = np.arange(self.batch_size)
         self.clipfracs = []
+
         for epoch in range(self.update_epochs):
+            # print('Epoch ', epoch)
             print_flag = False
             if epoch == self.update_epochs -1:
                 logger.log('train/batch_reward', rewards.mean(), step)
                 print_flag = True
             
-            np.random.shuffle(b_inds)
-            for start in range(0, self.batch_size, self.minibatch_size):
-                end = start+self.minibatch_size
-                mb_inds = b_inds[start:end]
-                approx_kl, old_approx_kl = self.update_actor_and_critic(b_obs[mb_inds], b_actions.long()[mb_inds], b_logprobs[mb_inds], b_values[mb_inds], 
-                                             b_returns[mb_inds], b_advantages[mb_inds], logger, step, print_flag)
+            suffled_minibatches = np.arange(0, self.batch_size, self.minibatch_size)
+            # np.random.shuffle(suffled_minibatches)
+            for minibatch in suffled_minibatches:
+                start = minibatch
+                end = minibatch + self.minibatch_size
+                # print(f'  Minibatch {start} - {end}')
+
+                suffled_sequences = np.arange(start, end, self.sequence_length)
+                # np.random.shuffle(suffled_sequences)
+                for sequence in suffled_sequences: 
+                    # print(f'    Sequence: {sequence}')
+
+                    batch_entropy = 0
+                    batch_value = 0
+                    batch_actor_loss = 0
+                    batch_critic_loss = 0
+                    batch_loss = 0
+
+                    for i in range(sequence, sequence+self.sequence_length):                  
+                        # print(f'      i: {i}')
+
+                        obs_tensor = torch.FloatTensor(b_obs[i]).to(self.device).unsqueeze(0)
+                        if self.has_memory:
+                            memory_tensor = torch.FloatTensor(b_memories[i]).to(self.device).unsqueeze(0)
+                            mask_tensor = torch.FloatTensor(1-b_dones[i]).to(self.device).unsqueeze(0)
+
+                            _, newlogprob, entropy, newvalue, memory = self.get_action(obs_tensor, b_actions.long()[i], memory_tensor * mask_tensor)
+                        else:
+                            _, newlogprob, entropy, newvalue, _ = self.get_action(obs_tensor, b_actions.long()[i])
+                        logratio = newlogprob - b_logprobs[i]
+                        ratio = logratio.exp()
+
+                        with torch.no_grad():
+                            # calculate approx_kl http://joschu.net/blog/kl-approx.html
+                            old_approx_kl = (-logratio).mean()
+                            approx_kl = ((ratio - 1) - logratio).mean()
+                            self.clipfracs += [((ratio - 1.0).abs() > self.clip_coef).float().mean().item()]
+
+                        mb_advantages = b_advantages[i]
+                        if self.norm_adv: # Use on vector envs
+                            mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
+
+                        # Policy loss
+                        pg_loss1 = -mb_advantages * ratio
+                        pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - self.clip_coef, 1 + self.clip_coef)
+                        actor_loss = torch.max(pg_loss1, pg_loss2).mean()
+
+                        # Value loss
+                        newvalue = newvalue.view(-1)
+                        if self.clip_vloss:
+                            v_loss_unclipped = (newvalue - b_returns[i]) ** 2
+                            v_clipped = b_values[i] + torch.clamp(newvalue - b_values[i], -self.clip_coef, self.clip_coef)
+                            v_loss_clipped = (v_clipped - b_returns[i]) ** 2
+                            v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
+                            critic_loss = 0.5 * v_loss_max.mean()
+                        else:
+                            critic_loss = 0.5 * ((newvalue - b_returns[i]) ** 2).mean()
+
+                        entropy_loss = entropy.mean()
+                        loss = actor_loss - self.ent_coef * entropy_loss + critic_loss * self.vf_coef
+
+                        # print(f'  i: {i}, Loss: {loss}, Actor Loss: {actor_loss}, Critic Loss: {critic_loss}, Entropy Loss: {entropy_loss}')
+                        # Update batch values
+                        batch_entropy += entropy.item()
+                        batch_value += newvalue.mean().item()
+                        batch_actor_loss += actor_loss.item()
+                        batch_critic_loss += critic_loss.item()
+                        batch_loss += loss
+
+                        if self.has_memory and i < sequence + self.sequence_length-1:
+                            b_memories[i + 1] = memory.detach()
+
+                    # print(f'Total Loss: {batch_loss}')
+
+                    # Update batch values
+                    batch_entropy /= self.sequence_length
+                    batch_value /= self.sequence_length
+                    batch_actor_loss /= self.sequence_length
+                    batch_critic_loss /= self.sequence_length
+                    batch_loss /= self.sequence_length
+                    
+                    # print(f'Batch Loss: {batch_loss}')
+                    # Update actor-critic
+                    self.optimizer.zero_grad()
+                    batch_loss.backward()
+                    grad_norm = sum(p.grad.data.norm(2).item() ** 2 for p in self.acmodel.parameters()) ** 0.5
+                    torch.nn.utils.clip_grad_norm_(self.acmodel.parameters(), self.max_grad_norm)
+                    self.optimizer.step()
+
+                    # Use action to take the suitable Q value
+                    if print_flag:
+                        logger.log('train_critic/loss', critic_loss, step)
+                        logger.log('train_actor/loss', actor_loss, step)
+                        logger.log('train_actor/entropy', entropy_loss, step)
+                        logger.log('train/gradnorm', grad_norm, step)
+                        logger.log('train/batchvalue', batch_value, step)
+
+                    self.acmodel.log(logger, step)
                 
             if self.target_kl is not None and approx_kl > self.target_kl:
                 break

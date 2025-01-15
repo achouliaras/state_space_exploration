@@ -88,7 +88,6 @@ class Workspace(object):
 
                 next_obs, reward, terminated, truncated, info = self.env.step(action)
                 
-                print(next_obs.shape)
                 print(reward, terminated, truncated)
                 frame = self.env.render()
                 time.sleep(0.05)

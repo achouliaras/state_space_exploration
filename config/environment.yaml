@@ -1,13 +1,15 @@
 # Environment
 domain: MiniGrid # highway-env # ALE # MuJoCo
-env: BlockedUnlockPickup-v0 # highway-v0 # Pong-v5 # InvertedPendulum-v5
+env: Empty-5x5-v0 # highway-v0 # Pong-v5 # InvertedPendulum-v5
 render_mode: rgb_array
 #max_episode_steps: 100
+max_episode_steps: 100
 
 action_type: Null
 state_type: Null
-architecture: MLP
-mode: 0
+latent_dim: 512
+architecture: Null
+mode: 1
 action_space: Null
 obs_space: Null
 action_dim: Null
@@ -16,7 +18,6 @@ action_dim: Null
 obs_type: rgb # [rgb, ram, greyscale]
 frame_stack: 4 # only works if obs_type=pixels
 frameskip: 4
-max_episode_steps: False
 action_repeat: 1 # set to 2 for pixels
 noop_max: 30
 terminal_on_life_loss: False

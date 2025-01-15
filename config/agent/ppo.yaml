@@ -1,16 +1,12 @@
-algorithm:
-  name: PPO
-
-agent:
-  #_target_: agent.ppo.PPOAgent
-  obs_shape: Null # to be specified on execution
-  obs_dim: Null # to be specified on execution
-  action_dim: Null # to be specified on execution
-  action_range: Null # to be specified on execution
-  action_cfg: Null # to be specified on execution
+name: PPO
+obs_shape: Null # to be specified on execution
+obs_dim: Null # to be specified on execution
+action_dim: Null # to be specified on execution
+action_range: Null # to be specified on execution
+action_cfg: Null # to be specified on execution
   
 discrete_action:
-  num_update_steps: 128
+  num_update_steps: 64
   batch_size: Null
   lr: 3e-4
   anneal_lr: True
@@ -18,7 +14,7 @@ discrete_action:
   gae_lambda: 0.95
   num_minibatches: 4
   update_epochs: 4
-  norm_adv: True
+  norm_adv: False
   clip_coef: 0.1
   clip_vloss: True
   ent_coef: 0.01

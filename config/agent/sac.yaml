@@ -1,5 +1,4 @@
 name: SAC
-#_target_: agent.sac.SACAgent
 obs_shape: Null # to be specified on execution
 obs_dim: Null # to be specified on execution
 action_dim: Null # to be specified on execution

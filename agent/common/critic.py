@@ -5,7 +5,7 @@ from torch import nn
 
 class SimpleCritic(nn.Module):
     """torch.distributions implementation of a categorical policy for discrete environments."""
-    def __init__(self, input_dim, output_dim, action_type, hidden_depth, hidden_dim, mode=0):
+    def __init__(self, input_dim, output_dim, action_type, hidden_depth, hidden_dim):
         super().__init__()
         self.action_type = action_type
         

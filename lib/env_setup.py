@@ -42,7 +42,7 @@ def make_env(cfg, render_mode=None):
             cfg.agent.obs_shape = obs_space.shape
             cfg.agent.obs_dim = obs_space.shape
             cfg.agent.action_dim = int(env.action_space.n)
-            cfg.agent.action_cfg = cfg.discrete_action
+            cfg.agent.action_cfg = cfg.agent.discrete_action
             cfg.agent.action_cfg.batch_size = 256
             cfg.agent.action_range = [0,1]
         elif any(i in cfg.env for i in envlistC):
@@ -63,7 +63,7 @@ def make_env(cfg, render_mode=None):
             cfg.agent.obs_shape = obs_space.shape
             cfg.agent.obs_dim = obs_space.shape[0]
             cfg.agent.action_dim = env.action_space.shape
-            cfg.agent.action_cfg = cfg.continuous_action
+            cfg.agent.action_cfg = cfg.agent.continuous_action
             cfg.agent.action_cfg.batch_size = 256
             cfg.agent.action_range = [
                 float(env.action_space.low.min()),
@@ -91,7 +91,7 @@ def make_env(cfg, render_mode=None):
         cfg.agent.obs_shape = obs_space.shape
         cfg.agent.obs_dim = obs_space.shape[0]
         cfg.agent.action_dim = env.action_space.shape
-        cfg.agent.action_cfg = cfg.continuous_action
+        cfg.agent.action_cfg = cfg.agent.continuous_action
         cfg.agent.action_cfg.batch_size = 256
         cfg.agent.action_range = [
             float(env.action_space.low.min()),
@@ -106,12 +106,14 @@ def make_env(cfg, render_mode=None):
         #Helper function to create MiniGrid environment
         id = cfg.domain+'-'+cfg.env
         if cfg.max_episode_steps:
-            env = gym.make(id=id, render_mode=render_mode, max_episode_steps=cfg.max_episode_steps)
+            env = gym.make(id=id, render_mode=render_mode, max_steps=cfg.max_episode_steps)
         else:
             env = gym.make(id=id, render_mode=render_mode) 
         
         env = minigrid.wrappers.FullyObsWrapper(env)
         env = minigrid.wrappers.ImgObsWrapper(env)
+        env = gym.wrappers.NormalizeObservation(env)
+        env = ReshapeObservationWrapper(env)
         env = gym.wrappers.RecordEpisodeStatistics(env, buffer_length=cfg.max_episode_steps)
         if cfg.save_video:
             env, cfg = record_video_wrap(env, cfg)
@@ -127,9 +129,9 @@ def make_env(cfg, render_mode=None):
         # cfg.action_dim = env.action_space.shape
         # cfg.agent.obs_dim = obs_space_shape # Test
         cfg.agent.obs_shape = obs_space.shape
-        cfg.agent.obs_dim = sp[1], sp[0], sp[2] # Test
+        cfg.agent.obs_dim = obs_space.shape
         cfg.agent.action_dim = int(env.action_space.n)
-        cfg.agent.action_cfg = cfg.discrete_action
+        cfg.agent.action_cfg = cfg.agent.discrete_action
         cfg.agent.action_cfg.batch_size = 64
         cfg.agent.action_range = [0,1]
     elif 'ALE' in cfg.domain:
@@ -171,7 +173,7 @@ def make_env(cfg, render_mode=None):
         cfg.agent.obs_shape = obs_space.shape
         cfg.agent.obs_dim = obs_space.shape
         cfg.agent.action_dim = int(env.action_space.n)
-        cfg.agent.action_cfg = cfg.discrete_action
+        cfg.agent.action_cfg = cfg.agent.discrete_action
         cfg.agent.action_cfg.batch_size = 64
         cfg.agent.action_range = [0,1]
     elif 'Box2D' in cfg.domain:
@@ -193,7 +195,7 @@ def make_env(cfg, render_mode=None):
             cfg.agent.obs_shape = obs_space.shape
             cfg.agent.obs_dim = obs_space.shape
             cfg.agent.action_dim = int(env.action_space.n)
-            cfg.agent.action_cfg = cfg.discrete_action
+            cfg.agent.action_cfg = cfg.agent.discrete_action
             cfg.agent.action_cfg.batch_size = 64
             cfg.agent.action_range = [0,1]
         elif 'BipedalWalker' in cfg.env:
@@ -214,7 +216,7 @@ def make_env(cfg, render_mode=None):
             cfg.agent.obs_shape = obs_space.shape
             cfg.agent.obs_dim = obs_space.shape[0]
             cfg.agent.action_dim = env.action_space.shape
-            cfg.agent.action_cfg = cfg.continuous_action
+            cfg.agent.action_cfg = cfg.agent.continuous_action
             cfg.agent.action_cfg.batch_size = 256
             cfg.agent.action_range = [
                 float(env.action_space.low.min()),
@@ -242,7 +244,7 @@ def make_env(cfg, render_mode=None):
             cfg.agent.obs_shape = obs_space.shape
             cfg.agent.obs_dim = obs_space.shape
             cfg.agent.action_dim = env.action_space.shape
-            cfg.agent.action_cfg = cfg.continuous_action
+            cfg.agent.action_cfg = cfg.agent.continuous_action
             cfg.agent.action_cfg.batch_size = 256
             cfg.agent.action_range = [
                 float(env.action_space.low.min()),
@@ -266,19 +268,37 @@ def make_env(cfg, render_mode=None):
         cfg.state_type = 'tabular'
         cfg.architecture = 'MLP'
         cfg.mode = 0
-        cfg.action_space = [1]
+        cfg.action_space = int(env.action_space.n)
         obs_space = env.observation_space
         #cfg.action_dim = env.action_space.shape
         cfg.agent.obs_shape = obs_space.shape
         cfg.agent.obs_dim = obs_space.shape
-        cfg.agent.action_dim = int(env.action_space.n)
-        cfg.agent.action_cfg = cfg.discrete_action
+        cfg.agent.action_dim = [1]
+        cfg.agent.action_cfg = cfg.agent.discrete_action
         cfg.agent.action_cfg.batch_size = 256
         cfg.agent.action_range = [0,1]
     else:
         raise NotImplementedError
     return env, cfg, obs_space
 
+class ReshapeObservationWrapper(gym.ObservationWrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        # Update the observation space to reflect the new shape
+        obs_shape = self.observation_space.shape
+        new_shape = (obs_shape[2], obs_shape[0], obs_shape[1])  # C, W, H
+        print(self.observation_space.low.shape)
+        self.observation_space = gym.spaces.Box(
+            low=self.observation_space.low.transpose(2, 0, 1),
+            high=self.observation_space.high.transpose(2, 0, 1),
+            shape=new_shape,
+            dtype=self.observation_space.dtype
+        )
+
+    def observation(self, observation):
+        # Transpose observation from (W, H, C) to (C, W, H)
+        observation = np.transpose(observation, (2, 0, 1))
+        return observation
 
 # class RewindWrapper(gym.Wrapper):
 #     def __init__(self, env, domain):

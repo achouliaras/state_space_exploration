@@ -88,7 +88,7 @@ def config_agent(cfg):
     
     return actor_cfg, critic_cfg
 
-def create_agent(cfg, actor_cfg, critic_cfg, action_cfg, obs_space):
+def create_agent(cfg, obs_space=None):
 
     if cfg.agent.name == 'SAC':
         actor_cfg, critic_cfg = config_agent(cfg)
@@ -99,7 +99,7 @@ def create_agent(cfg, actor_cfg, critic_cfg, action_cfg, obs_space):
                     device = torch.device(cfg.device), 
                     actor_cfg = actor_cfg,
                     critic_cfg = critic_cfg,
-                    action_cfg = action_cfg, 
+                    action_cfg = cfg.agent.action_cfg, 
                     discount = cfg.agent.discount, 
                     init_temperature = cfg.agent.init_temperature,
                     mode= cfg.mode, 
@@ -117,13 +117,14 @@ def create_agent(cfg, actor_cfg, critic_cfg, action_cfg, obs_space):
             replay_buffer = None
         return agent, replay_buffer
     elif cfg.agent.name == 'PPO':
-        agent = PPO(obs_space = obs_space,
-                    obs_dim = cfg.agent.obs_dim, 
+        agent = PPO(obs_dim = cfg.agent.obs_dim, 
                     action_type= cfg.action_type,
                     device = torch.device(cfg.device), 
+                    latent_dim = cfg.latent_dim,
                     architecture=cfg.architecture,
+                    state_type=cfg.state_type, 
                     agent_cfg = cfg.agent,
-                    action_cfg = action_cfg, 
+                    action_cfg = cfg.agent.action_cfg, 
                     mode= cfg.mode,
                     normalize_state_entropy = True)
         return agent

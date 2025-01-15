@@ -11,5 +11,5 @@ episodes_2_generate=5
 python themis_generate_human_demos.py device=cpu domain=$domain env=$env render_mode=human seed=$seed \
               episodes_to_gen=$episodes_2_generate overwrite_trajectories=False \
               num_seed_steps=$num_seed_steps num_unsup_steps=$num_unsup_steps num_train_steps=$num_train_steps \
-              debug=True algorithm.name=HUMAN frameskip=1 frame_stack=1 test=Demos cpu_id=1
+              debug=True agent.name=HUMAN frameskip=1 frame_stack=1 test=Demos cpu_id=1
               

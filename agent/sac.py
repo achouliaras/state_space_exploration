@@ -289,27 +289,7 @@ class SAC(Agent):
             alpha_loss.backward()
             self.log_alpha_optimizer.step()
             
-    def update(self, replay_buffer, logger, step, total_timesteps, gradient_update=1):
-        for index in range(gradient_update):
-            obs, action, reward, next_obs, not_done, not_done_no_max = replay_buffer.sample(self.batch_size)
-
-            print_flag = False
-            if index == gradient_update -1:
-                logger.log('train/batch_reward', reward.mean(), step)
-                print_flag = True
-                
-            if step % self.critic_update_frequency == 0:
-                self.update_critic(obs, action, reward, next_obs, not_done_no_max, logger, step, print_flag)
-
-            if step % self.actor_update_frequency == 0:
-                for _ in range(self.actor_update_frequency):
-                    self.update_actor_and_alpha(obs, logger, step, print_flag)
-                    if self.action_type == 'Discrete': break # Do not update actor as in TD3 for Discrete environments
-
-        if step % self.critic_target_update_frequency == 0:
-            self.soft_update_params(self.critic, self.critic_target, self.critic_tau)
-            
-    def update_state_ent(self, replay_buffer, logger, step, total_timesteps, gradient_update=1, K=5):
+    def pretrain_update(self, replay_buffer, logger, step, total_timesteps, gradient_update=1, K=5):
         for index in range(gradient_update):
             obs, full_obs, action, reward, next_obs, not_done, not_done_no_max = replay_buffer.sample_state_ent(self.batch_size)
 
@@ -332,24 +312,44 @@ class SAC(Agent):
     
     def update_after_reset(self, replay_buffer, logger, step, total_timesteps, gradient_update=1, policy_update=True):
         for index in range(gradient_update):
-            obs, action, reward, next_obs, not_done, not_done_no_max = replay_buffer.sample(
-                self.batch_size)
+            obs, action, reward, next_obs, not_done, not_done_no_max = replay_buffer.sample_tensors(self.batch_size)
 
             print_flag = False
             if index == gradient_update -1:
                 logger.log('train/batch_reward', reward.mean(), step)
                 print_flag = True
                 
-            self.update_critic(obs, action, reward, next_obs, not_done_no_max,
-                               logger, step, print_flag)
+            if step % self.critic_update_frequency == 0:
+                self.update_critic(obs, action, reward, next_obs, not_done_no_max, logger, step, print_flag)
 
             if index % self.actor_update_frequency == 0 and policy_update:
-                self.update_actor_and_alpha(obs, logger, step, print_flag)
+                for _ in range(self.actor_update_frequency):
+                    self.update_actor_and_alpha(obs, logger, step, print_flag)
+                    if self.action_type == 'Discrete': break # Do not update actor as in TD3 for Discrete environments
 
-            if index % self.critic_target_update_frequency == 0:
-                self.soft_update_params(self.critic, self.critic_target,
-                                         self.critic_tau)
-    
+        if step % self.critic_target_update_frequency == 0:
+            soft_update_params(self.critic, self.critic_target, self.critic_tau)
+ 
+    def update(self, replay_buffer, logger, step, total_timesteps, gradient_update=1):
+        for index in range(gradient_update):
+            obs, action, reward, next_obs, not_done, not_done_no_max = replay_buffer.sample_tensors(self.batch_size)
+
+            print_flag = False
+            if index == gradient_update -1:
+                logger.log('train/batch_reward', reward.mean(), step)
+                print_flag = True
+                
+            if step % self.critic_update_frequency == 0:
+                self.update_critic(obs, action, reward, next_obs, not_done_no_max, logger, step, print_flag)
+
+            if step % self.actor_update_frequency == 0:
+                for _ in range(self.actor_update_frequency):
+                    self.update_actor_and_alpha(obs, logger, step, print_flag)
+                    if self.action_type == 'Discrete': break # Do not update actor as in TD3 for Discrete environments
+
+        if step % self.critic_target_update_frequency == 0:
+            soft_update_params(self.critic, self.critic_target, self.critic_tau)
+  
 def soft_update_params(net, target_net, tau):
     for param, target_param in zip(net.parameters(), target_net.parameters()):
         target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)

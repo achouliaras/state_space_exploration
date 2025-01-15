@@ -7,10 +7,10 @@ defaults:
 experiment_type: State-Vis-Pretraining
 test: PEBBLE
 device: cpu
-num_seed_steps: 5e2 # Steps that the agent does random actions to fill the buffers 5e3 for continuous
-num_unsup_steps: 500 #5000
+# num_seed_steps: 5e2 # Steps that the agent does random actions to fill the buffers 5e3 for continuous
+# num_unsup_steps: 500 #5000
 num_train_steps: 5e6 #1e6 for continuous
-replay_buffer_capacity: 1e4 #1e6
+# replay_buffer_capacity: 1e4 #1e6
 deploy_mode: False
 
 # unsup training
@@ -44,11 +44,11 @@ teacher_eps_equal: 0    # Probability of considering both segments equally good
 reward_schedule: 0
 
 # evaluation config
-eval_frequency: 100 #10000
+eval_frequency: 10000 #100
 num_eval_episodes: 10
 
 # logger
-log_frequency: 100
+log_frequency: 1000
 log_save_tb: true
 
 # video recorder (Use only in evaluation)
@@ -67,7 +67,7 @@ checkpoints_dir: ${models_dir}/checkpoints/
 xplain_action: False
 xplain_state: False
 
-models_dir: ${output_dir}/${algorithm.name}_${test}/seed-${seed}
+models_dir: ${output_dir}/${agent.name}_${test}/seed-${seed}
 
 # All output from experiments
 output_dir: results/${experiment_type}/${domain}/${env}

@@ -21,7 +21,7 @@ export_clips: False
 seed: 1
 debug: False
 
-# models_dir: ${output_dir}/${algorithm.name}_${test}/seed-${seed}
+# models_dir: ${output_dir}/${agent.name}_${test}/seed-${seed}
 
 # All output from experiments
 output_dir: results/${experiment_type}/${domain}/${env}
