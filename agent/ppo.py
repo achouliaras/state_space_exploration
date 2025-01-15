@@ -314,7 +314,6 @@ class PPO(Agent):
 
         with torch.no_grad():
             if self.has_memory:
-                # print(next_mask)
                 _, next_value, _ = self.acmodel(next_obs, next_memory * next_mask)
             else:
                 _, next_value, _ = self.acmodel(next_obs)

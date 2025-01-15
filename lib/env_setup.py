@@ -287,7 +287,7 @@ class ReshapeObservationWrapper(gym.ObservationWrapper):
         # Update the observation space to reflect the new shape
         obs_shape = self.observation_space.shape
         new_shape = (obs_shape[2], obs_shape[0], obs_shape[1])  # C, W, H
-        print(self.observation_space.low.shape)
+        # print(self.observation_space.low.shape)
         self.observation_space = gym.spaces.Box(
             low=self.observation_space.low.transpose(2, 0, 1),
             high=self.observation_space.high.transpose(2, 0, 1),
