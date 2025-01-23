@@ -15,7 +15,8 @@ import copy
 from omegaconf import DictConfig
 from termcolor import colored
 from collections import deque
-
+from tqdm import tqdm
+import hydra
 from lib.logger import Logger
 from lib import env_setup
 from lib import agent_setup
@@ -42,13 +43,13 @@ class Workspace(object):
 
         utils.set_seed_everywhere(cfg.seed)
         self.device = torch.device(cfg.device)
+        cfg.save_video=False
         self.env, cfg, self.obs_space = env_setup.make_env(cfg, cfg.render_mode)
         self.env.action_space.seed(cfg.seed)
         self.cfg = cfg
         
-        actor_cfg, critic_cfg = agent_setup.config_agent(cfg)
-
-        self.agent, self.replay_buffer = agent_setup.create_agent(cfg, actor_cfg, critic_cfg, cfg.agent.action_cfg, self.obs_space)
+        self.agent = agent_setup.create_agent(cfg)
+        
         # for logging
         self.total_feedback = 0
         self.labeled_feedback = 0
@@ -56,6 +57,7 @@ class Workspace(object):
         self.episode=0
         self.interactions=0
         
+        self.trajectory=[]
         print('INIT COMPLETE')
         
     @property
@@ -70,99 +72,55 @@ class Workspace(object):
     def global_frame(self):
         return self.step #* self.cfg.action_repeat
 
-    def run(self):
-        self.episode, episode_reward, terminated, truncated = 0, 0, False, False
-        if self.cfg.log_success:
-            episode_success = 0
-        true_episode_reward = 0
-        
-        # store train returns of recent 10 episodes
-        # avg_train_true_return = deque([], maxlen=10) 
-        total_time=0
+    def generate_training_data(self):
+        self.episode, terminated, truncated = 0, False, False
+        self.total_time=0
         start_time = time.time()
-
         obs, _ = self.env.reset(seed = self.cfg.seed)
         # obs, _ = self.env.reset()
-        obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
+        # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
 
-        for global_step in range(int(self.cfg.num_seed_steps + self.cfg.num_unsup_steps+1)):
+        for global_step in tqdm(range(int(self.cfg.num_seed_steps+1)), desc="GENERATING DATA: "):
             # sample action for data collection
-            if global_step < self.cfg.num_seed_steps:
-                action = self.env.action_space.sample()
-            else:
-                #with utils.eval_mode(self.agent):
-                action, _, _ = self.agent.get_action(torch.FloatTensor(obs).to(self.device).unsqueeze(0))
-                action = action.detach().cpu().numpy()[0]
-                # print(action)
-
+            action = self.env.action_space.sample()
+            
             next_obs, reward, terminated, truncated, info = self.env.step(action)
 
             if terminated or truncated:
                 episode_time = time.time() - start_time
-                total_time += episode_time
-                self.logger.log('train/episode', self.episode, global_step)
-                self.logger.log('train/episode_reward', episode_reward, global_step)
-                self.logger.log('train/true_episode_reward', true_episode_reward, global_step)
-                self.logger.log('train/duration', episode_time, global_step)
-                self.logger.log('train/total_duration', total_time, global_step)
-                if self.cfg.log_success:
-                    self.logger.log('train/episode_success', episode_success, global_step)
-                    self.logger.log('train/true_episode_success', episode_success, global_step)
-
-                self.logger.dump(global_step, save=(global_step > self.cfg.num_seed_steps), ty='train')
-                start_time = time.time()
-
-                # episode_reward = 0
-                # avg_train_true_return.append(true_episode_reward)
-                true_episode_reward = 0
-                if self.cfg.log_success:
-                    episode_success = 0
+                self.total_time += episode_time
+                
                 self.episode += 1
                 self.step = global_step
                 next_obs, _ = self.env.reset()
-                next_obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
+                # next_obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
+            else:
+                self.trajectory.append([obs,action,reward,next_obs])
                 
-
-            # Push data to replay buffer
-            self.replay_buffer.add(obs, action, reward, next_obs, terminated, truncated)
-
-
             obs = next_obs
-            true_episode_reward += reward
 
-        # Pre-Training Update
-        if global_step >= self.cfg.num_seed_steps:
-            self.agent.pretrain_update(self.replay_buffer, self.logger, 
-                                        global_step, self.cfg.num_train_steps, 
-                                        gradient_update=1, K=self.cfg.topK)
-        elif global_step == self.cfg.num_seed_steps-1: 
-            obs, _ = self.env.reset()
-            obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
-                            
-            self.episode = 0
-            true_episode_reward = 0
-            print('OFFLINE PRETRAINING STARTS')
-        
-        
-        if self.cfg.log_success:
-            episode_success = max(episode_success, terminated)
+        print(f'DATA GENERATED: Steps:{global_step}, Episodes:{self.episode}, Time:{self.total_time} sec')
+
+    def run(self):
+        print('OFFLINE PRETRAINING STARTS')
+        start_time = time.time()
+        # Training Loop
+        for epoch in tqdm(range(self.cfg.offline_epochs), desc="Training Auto-Encoder: "):
+            # Pre-Training Update 
+            loss = self.agent.offline_update(self.trajectory, self.logger, epoch*self.cfg.max_episode_steps)
+            
+            if epoch % 10 == 0:
+                print(f"Epoch {epoch}, Loss: {100 * loss:.6f} %")
+        print(f"Epoch {epoch}, Loss: {loss}")
 
         episode_time = time.time() - start_time
-        total_time += episode_time
-        self.logger.log('train/episode', self.episode, global_step)
-        self.logger.log('train/episode_reward', episode_reward, global_step)
-        self.logger.log('train/true_episode_reward', true_episode_reward, global_step)
-        self.logger.log('train/duration', episode_time, global_step)
-        self.logger.log('train/total_duration', total_time, global_step)
-        if self.cfg.log_success:
-            self.logger.log('train/episode_success', episode_success, global_step)
-            self.logger.log('train/true_episode_success', episode_success, global_step)
-        
-        self.step = global_step
-        self.logger.dump(global_step, ty='train')
+        self.total_time += episode_time
+        self.logger.log('train/epoch', epoch, epoch)
+        self.logger.log('train/duration', episode_time, epoch)
+        self.logger.log('train/total_duration', self.total_time, epoch)
+        self.logger.dump(epoch, ty='train')
         self.env.close()
         print('OFFLINE PRETRAINING FINISHED')
-        self.logger = evaluate_agent(self.agent, self.cfg, self.logger)
         self.logger.close()
 
     def save_results(self):
@@ -170,10 +128,10 @@ class Workspace(object):
         keys_to_save = ['step', 'episode']
         payload = {k: self.__dict__[k] for k in keys_to_save}
 
-        agent_setup.save_agent(self.agent, self.replay_buffer, payload, self.work_dir, self.cfg, self.global_step)
+        agent_setup.save_agent(self.agent, None, payload, self.work_dir, self.cfg, self.global_step)
         print('SAVING COMPLETED')
         
-@hydra.main(version_base=None, config_path="../config", config_name='themis_pretrain')
+@hydra.main(version_base=None, config_path="../config", config_name='themis_offline_pretrain')
 def main(cfg : DictConfig):
     work_dir = Path.cwd()
     # cfg.output_dir = work_dir / cfg.output_dir  
@@ -193,6 +151,7 @@ def main(cfg : DictConfig):
     workspace = Workspace(cfg, work_dir)
     
     print(f'Workspace: {work_dir}\nSEED {cfg.seed}')
+    workspace.generate_training_data()
     workspace.run()
     workspace.save_results()
     print(f'Experiment with SEED {cfg.seed} finished')

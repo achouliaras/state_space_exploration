@@ -125,6 +125,7 @@ def create_agent(cfg, obs_space=None):
                     state_type=cfg.state_type, 
                     agent_cfg = cfg.agent,
                     action_cfg = cfg.agent.action_cfg, 
+                    test = cfg.test,
                     mode= cfg.mode,
                     normalize_state_entropy = True)
         return agent
@@ -137,7 +138,8 @@ def save_agent(agent, replay_buffer, payload, work_dir, cfg, global_frame):
 
     # Save agent's models & replay buffer
     agent.save(models_dir, global_frame)
-    replay_buffer.save(models_dir, global_frame)
+    if replay_buffer != None:
+        replay_buffer.save(models_dir, global_frame)
     
     # Save experiment variables like step and episode
     snapshot = models_dir / f'snapshot_{global_frame}.pt'

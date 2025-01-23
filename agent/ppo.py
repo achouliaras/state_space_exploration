@@ -1,11 +1,12 @@
 import numpy as np
+import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
 from agent import Agent
 from agent.pretraining import pebble
-from agent.common.encoder import Encoder
+from agent.common.encoder import Encoder, Decoder
 from agent.common.critic import DoubleQCritic, SimpleCritic
 from agent.common.actor import DiagGaussianActor, CategoricalActor, SimpleActor
 
@@ -99,16 +100,51 @@ class ACModel(nn.Module):
         self.actor.log(logger,step)
         self.critic.log(logger,step)
 
+class Autoencoder(nn.Module):
+    def __init__(self, obs_dim, action_dim, action_type, latent_dim, architecture, mode):
+        super().__init__()
+        self.obs_dim = obs_dim
+        self.action_dim = action_dim
+        self.action_type = action_type
+        self.latent_dim = latent_dim
+        self.architecture = architecture
+        self.mode = mode
+
+        self.network = Encoder(obs_shape=self.obs_dim,
+                          latent_dim=self.latent_dim,
+                          architecture=self.architecture,
+                          mode=self.mode)
+        
+        self.decoder = Decoder(obs_shape=self.obs_dim,
+                          latent_dim=self.latent_dim,
+                          architecture=self.architecture,
+                          mode=mode)
+    
+    def train(self, training=True):
+        self.training = training
+        self.network.train(training)
+        self.decoder.train(training)
+
+    def forward(self, obs, memory = None):
+        x, memory = self.network(obs, memory)
+        prediction_obs = self.decoder(x)
+        return prediction_obs, x, memory
+    
+    def log(self, logger, step):
+        self.network.log(logger,step)
+        self.decoder.log(logger,step)
+
 class PPO(Agent):
     """PPO algorithm."""
     def __init__(self, obs_dim, action_type, device, latent_dim, architecture, state_type,
-                 agent_cfg, action_cfg, mode=1, normalize_state_entropy=True):
+                 agent_cfg, action_cfg, test, mode=1, normalize_state_entropy=True):
         super().__init__()
         self.obs_dim = obs_dim
         self.action_type = action_type
         self.device = device
         self.latent_dim = latent_dim
         self.architecture = architecture
+        self.test = test
 
         self.state_type = state_type
         self.action_dim = agent_cfg.action_dim
@@ -138,27 +174,41 @@ class PPO(Agent):
         self.sequence_length = 1
         if 'LSTM' in architecture: 
             self.has_memory = True
-            self.sequence_length = 4 # CHECK
+            self.sequence_length = action_cfg.sequence_length # CHECK
 
         self.minibatch_size =  int(self.batch_size // self.num_minibatches)
         self.batch_size_of_sequences = int(self.minibatch_size // self.sequence_length)
         
-        self.acmodel = ACModel(obs_dim=self.obs_dim,
+        if self.test == 'OFFLINE':
+            self.offline_model = Autoencoder(obs_dim=self.obs_dim,
+                                action_dim=self.action_dim,
+                                action_type=self.action_type,
+                                latent_dim = self.latent_dim,
+                                architecture=self.architecture,
+                                mode=mode)
+            
+            self.offline_optimizer = torch.optim.Adam(self.offline_model.parameters(), lr=self.lr) # CHECK
+            self.offline_loss_fn = nn.MSELoss()
+        else:
+            self.acmodel = ACModel(obs_dim=self.obs_dim,
                                action_dim=self.action_dim,
                                action_type=self.action_type,
                                latent_dim = self.latent_dim,
                                architecture=self.architecture,
                                mode=mode)
         
-        # optimizers
-        self.optimizer = torch.optim.Adam(self.acmodel.parameters(), lr=self.lr, eps=1e-08) # CHECK
-        
+            # optimizers
+            self.optimizer = torch.optim.Adam(self.acmodel.parameters(), lr=self.lr, eps=1e-08) # CHECK
+
         # change mode
         self.train()
     
     @property
     def memory_size(self):
-        return (self.acmodel.network.memory_size,)
+        if self.test == 'OFFLINE':
+            return (self.offline_model.network.memory_size,)
+        else:
+            return (self.acmodel.network.memory_size,)
         
     def reset_actor_critic(self):
         # reset actor and critic
@@ -169,7 +219,10 @@ class PPO(Agent):
         self.acmodel.reset_network()
         
     def train(self, training=True):
-        self.acmodel.train(training=training)
+        if self.test == 'OFFLINE':
+            self.offline_model.train(training=training)
+        else:
+            self.acmodel.train(training=training)
 
     def get_action(self, obs, action = None, memory = None):
         if self.action_type == 'Continuous':
@@ -239,27 +292,80 @@ class PPO(Agent):
         self.critic.log(logger, step)
     
     def save(self, model_dir, step):
-        torch.save(
-            self.acmodel.actor.state_dict(), '%s/actor_%s.pt' % (model_dir, step)
-        )
-        torch.save(
-            self.acmodel.critic.state_dict(), '%s/critic_%s.pt' % (model_dir, step)
-        )
-        torch.save(
-            self.acmodel.network.state_dict(), '%s/encoder%s.pt' % (model_dir, step)
-        )
+        if self.test == 'OFFLINE':
+            torch.save(
+                self.offline_model.network.state_dict(), '%s/encoder%s.pt' % (model_dir, step)
+            )
+            torch.save(
+                self.offline_model.decoder.state_dict(), '%s/decoder%s.pt' % (model_dir, step)
+            )
+        else:
+            torch.save(
+                self.acmodel.actor.state_dict(), '%s/actor_%s.pt' % (model_dir, step)
+            )
+            torch.save(
+                self.acmodel.critic.state_dict(), '%s/critic_%s.pt' % (model_dir, step)
+            )
+            torch.save(
+                self.acmodel.network.state_dict(), '%s/encoder%s.pt' % (model_dir, step)
+            )
         
     def load(self, model_dir, step):
+        self.acmodel.network.load_state_dict(
+            torch.load('%s/encoder%s.pt' % (model_dir, step))
+        )
         self.acmodel.actor.load_state_dict(
             torch.load('%s/actor_%s.pt' % (model_dir, step))
         )
         self.acmodel.critic.load_state_dict(
             torch.load('%s/critic_%s.pt' % (model_dir, step))
         )
-        self.acmodel.network.load_state_dict(
-            torch.load('%s/encoder%s.pt' % (model_dir, step))
-        )
+        
+
+    def offline_update(self, trajectory, logger, step):
+        batch_size = self.batch_size * 4
+        epoch_loss = 0
+        no_batches = int(len(trajectory) // batch_size)
+
+        for _ in range(no_batches):
+            batch = random.sample(trajectory, batch_size)
+            s_t, a_t, r_t, s_t1 = zip(*batch)
             
+            s_t = torch.tensor(np.stack(s_t), dtype=torch.float32) / 255.0
+            s_t1 = torch.tensor(np.stack(s_t1), dtype=torch.float32) / 255.0
+            
+            # Convert data to sequences
+            
+            suffled_sequences = np.arange(0, batch_size, self.sequence_length)
+            np.random.shuffle(suffled_sequences)
+
+            for sequence in suffled_sequences: 
+                # print(f'    Sequence: {sequence}')
+                batch_loss = 0
+                memory = np.zeros(self.memory_size)
+                
+                for i in range(sequence, sequence+self.sequence_length):
+                    obs = s_t[i].to(self.device).unsqueeze(0)
+                    memory_tensor = torch.FloatTensor(memory).to(self.device).unsqueeze(0)
+                    
+                    prediction_obs, embedding, memory,  = self.offline_model(obs, memory_tensor)
+
+                    loss = self.offline_loss_fn(prediction_obs, obs)
+                    batch_loss += loss
+
+                    memory = memory.detach().cpu().numpy()[0]
+                batch_loss /= self.sequence_length
+            
+            self.offline_optimizer.zero_grad()
+            batch_loss.backward()
+            self.offline_optimizer.step()
+
+            epoch_loss += batch_loss.item()
+        
+        epoch_loss /= no_batches
+        logger.log('train_autoencoder/loss', epoch_loss, step)
+        return epoch_loss
+           
     # UPDATE
     def pretrain_update(self, replay_buffer, logger, step, total_timesteps, gradient_update=1, K=5):
         for index in range(gradient_update):
@@ -275,24 +381,6 @@ class PPO(Agent):
                                             logger, step, K=K, print_flag=print_flag)
 
             if step % self.actor_update_frequency == 0:
-                for _ in range(self.actor_update_frequency):
-                    self.update_actor_and_alpha(obs, logger, step, print_flag)
-                    if self.action_type == 'Discrete': break # Do not update actor as in TD3 for Discrete environments
-    
-    # UPDATE
-    def update_after_reset(self, replay_buffer, logger, step, total_timesteps, gradient_update=1, policy_update=True):
-        for index in range(gradient_update):
-            obs, action, reward, next_obs, not_done, not_done_no_max = replay_buffer.sample_tensors(self.batch_size)
-
-            print_flag = False
-            if index == gradient_update -1:
-                logger.log('train/batch_reward', reward.mean(), step)
-                print_flag = True
-                
-            if step % self.critic_update_frequency == 0:
-                self.update_critic(obs, action, reward, next_obs, not_done_no_max, logger, step, print_flag)
-
-            if index % self.actor_update_frequency == 0 and policy_update:
                 for _ in range(self.actor_update_frequency):
                     self.update_actor_and_alpha(obs, logger, step, print_flag)
                     if self.action_type == 'Discrete': break # Do not update actor as in TD3 for Discrete environments
@@ -362,7 +450,8 @@ class PPO(Agent):
                 # print(f'  Minibatch {start} - {end}')
 
                 suffled_sequences = np.arange(start, end, self.sequence_length)
-                # np.random.shuffle(suffled_sequences)
+                np.random.shuffle(suffled_sequences)
+
                 for sequence in suffled_sequences: 
                     # print(f'    Sequence: {sequence}')
 

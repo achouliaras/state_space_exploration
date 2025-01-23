@@ -120,7 +120,7 @@ def make_env(cfg, render_mode=None):
 
         cfg.action_type = 'Discrete'
         cfg.state_type = 'pixel-grid'
-        cfg.architecture = 'CNN-LSTM'
+        
         cfg.mode = 1
         cfg.action_space = [1]
         obs_space = env.observation_space

@@ -21,6 +21,7 @@ discrete_action:
   vf_coef: 0.5
   max_grad_norm: 0.5
   target_kl: None
+  sequence_length: 4
 
 continuous_action:
   num_update_steps: 128
@@ -38,3 +39,4 @@ continuous_action:
   vf_coef: 0.5
   max_grad_norm: 0.5
   target_kl: None
+  sequence_length: 4

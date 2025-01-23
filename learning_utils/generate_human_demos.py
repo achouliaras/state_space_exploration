@@ -14,6 +14,7 @@ from tqdm import tqdm
 import copy
 import hydra
 from omegaconf import DictConfig
+from termcolor import colored
 
 from lib.logger import Logger
 from lib.trajectory_io import TrajectoryProcessor
@@ -23,6 +24,7 @@ from lib import utils
 
 class Workspace(object):
     def __init__(self, cfg, work_dir):
+        print(colored('EXECUTING GENERATE HUMAN DEMOS', 'green'))
         self.work_dir = work_dir
         
         self.logger = Logger(
