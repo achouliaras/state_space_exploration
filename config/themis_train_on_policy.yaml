@@ -7,9 +7,10 @@ defaults:
 experiment_type: State-Vis-Pretraining
 test: PEBBLE
 device: cpu
-# num_seed_steps: 5e2 # Steps that the agent does random actions to fill the buffers 5e3 for continuous
-# num_unsup_steps: 500 #5000
-num_train_steps: 5e6 #1e6 for continuous
+offline_epochs: 100
+num_seed_steps: 0 # Steps that the agent does random actions to fill the buffers 5e3 for continuous
+num_unsup_steps: 0 #5000
+num_train_steps: 5e5 #1e6 for continuous
 # replay_buffer_capacity: 1e4 #1e6
 deploy_mode: False
 
@@ -68,6 +69,8 @@ xplain_action: False
 xplain_state: False
 
 models_dir: ${output_dir}/${agent.name}_${test}/seed-${seed}
+
+offline_models_dir: ${output_dir}/${agent.name}_OFFLINE/seed-${seed}
 
 # All output from experiments
 output_dir: results/${experiment_type}/${domain}/${env}

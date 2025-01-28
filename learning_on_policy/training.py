@@ -46,10 +46,12 @@ class Workspace(object):
         self.batch_size =  int(self.num_update_steps) # x num_of_envs
         self.cfg.agent.action_cfg.batch_size = self.batch_size
         self.num_iterations = int((self.cfg.num_train_steps+1) // self.batch_size)
+        
         self.agent = agent_setup.create_agent(cfg)
         
         # Load AGENT
-        # self.agent, _ = agent_setup.load_agent(self.work_dir, self.cfg, self.agent)
+        self.agent, _ = agent_setup.load_agent(self.work_dir, self.cfg, self.agent, mode='OFFLINE')
+        # self.agent.freeze_models(mode='OFFLINE')
         # self.agent.reset_critic()
 
         # If you add parallel envs adjust size
@@ -90,7 +92,8 @@ class Workspace(object):
             episode_success = 0
         
         global_step = 0
-
+        true_episode_reward = 0
+        episode_length = 0
         # store train returns of recent 10 episodes
         # avg_train_true_return = deque([], maxlen=10) 
         total_time=0
@@ -113,6 +116,7 @@ class Workspace(object):
                 
             for step in range(self.num_update_steps):
                 global_step += 1 # or num of envs
+                episode_length +=1
                 self.obs[step] = obs
                 self.dones[step] = done
                 if self.agent.has_memory:
@@ -145,17 +149,19 @@ class Workspace(object):
                 if self.agent.has_memory:
                     next_memory = memory
                 self.rewards[step] = reward
+                
                 obs = next_obs
                 done = next_done
                 memory = next_memory
+                true_episode_reward += reward
                 
                 if terminated or truncated:
                     episode_time = time.time() - start_time
                     total_time += episode_time
                     self.logger.log('train/episode', self.episode, global_step)
                     self.logger.log('train/episode_reward', episode_reward, global_step)
-                    self.logger.log('train/true_episode_reward', info["episode"]["r"], global_step)
-                    self.logger.log('train/episode_length', info["episode"]["l"], global_step)
+                    self.logger.log('train/true_episode_reward', true_episode_reward, global_step)
+                    self.logger.log('train/episode_length', episode_length, global_step)
                     self.logger.log('train/duration', episode_time, global_step)
                     self.logger.log('train/total_duration', total_time, global_step)
                     if self.cfg.log_success:
@@ -168,6 +174,8 @@ class Workspace(object):
                     # episode_reward = 0
                     if self.cfg.log_success:
                         episode_success = 0
+                    true_episode_reward = 0
+                    episode_length = 0
                     self.step = step
                     self.episode += 1
                     obs, _ = self.env.reset()
@@ -190,15 +198,15 @@ class Workspace(object):
         total_time += episode_time
         self.logger.log('train/episode', self.episode, global_step)
         self.logger.log('train/episode_reward', episode_reward, global_step)
-        self.logger.log('train/true_episode_reward', info["episode"]["r"], global_step)
-        self.logger.log('train/episode_length', info["episode"]["l"], global_step)
+        self.logger.log('train/true_episode_reward', true_episode_reward, global_step)
+        self.logger.log('train/episode_length', episode_length, global_step)
         self.logger.log('train/duration', episode_time, global_step)
         self.logger.log('train/total_duration', total_time, global_step)
         if self.cfg.log_success:
             self.logger.log('train/episode_success', episode_success, global_step)
             self.logger.log('train/true_episode_success', episode_success, global_step)
 
-        self.logger.dump(global_step, ty='train')
+        # self.logger.dump(global_step, ty='train')
         self.env.close()
         print('TRAINING FINISHED')
         self.logger = evaluate_agent(self.agent, self.cfg, self.logger)
@@ -209,7 +217,7 @@ class Workspace(object):
         keys_to_save = ['step', 'episode']
         payload = {k: self.__dict__[k] for k in keys_to_save}
 
-        agent_setup.save_agent(self.agent, payload, self.work_dir, self.cfg, self.global_step)
+        agent_setup.save_agent(self.agent, None, payload, self.work_dir, self.cfg, self.global_step)
         print('SAVING COMPLETED')
         
 @hydra.main(version_base=None, config_path="../config", config_name='themis_train_on_policy')

@@ -1,9 +1,12 @@
 # seed=$RANDOM
 seed=2
-test_name=Vanilla
+test_name=Pre-Offline #Vanilla #Pre-Offline #NoMemory
 domain=MiniGrid # highway-env # ALE
-env=BlockedUnlockPickup-v0 #Empty-5x5-v0 #BlockedUnlockPickup-v0 # highway-v0 # Breakout-v5
-num_train_steps=1000000
+env=Empty-8x8-v0 #Empty-5x5-v0 #BlockedUnlockPickup-v0 # highway-v0 # Breakout-v5
+architecture=CNN-LSTM
+offline_num_seed_steps=5e3
+offline_epochs=100
+num_train_steps=100100
 episodes_2_generate=16 
 export PYTORCH_ENABLE_MPS_FALLBACK=1
 
@@ -13,6 +16,12 @@ num_cores=4
 
 # Calculate episodes per process to generate
 episodes_per_core=$(($episodes_2_generate / $num_cores))
+
+# Offline Training script
+sudo python -m learning_offline.pretraining device=cpu \
+       domain=$domain env=$env render_mode=rgb_array max_episode_steps=100 seed=$seed \
+       architecture=$architecture offline_epochs=$offline_epochs \
+       num_seed_steps=$offline_num_seed_steps debug=True test=OFFLINE
 
 # # Pretraining script
 # python -m learning_on_policy.pretraining device=cpu \
@@ -32,6 +41,7 @@ episodes_per_core=$(($episodes_2_generate / $num_cores))
 # wait
 
 # Training script
-python -m learning_on_policy.training device=cpu \
+sudo python -m learning_on_policy.training device=cpu \
        domain=$domain env=$env render_mode=rgb_array max_episode_steps=100 seed=$seed \
+       architecture=$architecture offline_epochs=$offline_epochs \
        num_train_steps=$num_train_steps debug=True test=$test_name

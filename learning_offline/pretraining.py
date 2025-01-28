@@ -127,8 +127,8 @@ class Workspace(object):
         print('SAVING STARTS')
         keys_to_save = ['step', 'episode']
         payload = {k: self.__dict__[k] for k in keys_to_save}
-
-        agent_setup.save_agent(self.agent, None, payload, self.work_dir, self.cfg, self.global_step)
+        
+        agent_setup.save_agent(self.agent, None, payload, self.work_dir, self.cfg, self.cfg.offline_epochs)
         print('SAVING COMPLETED')
         
 @hydra.main(version_base=None, config_path="../config", config_name='themis_offline_pretrain')

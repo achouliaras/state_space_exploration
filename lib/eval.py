@@ -1,6 +1,7 @@
 import lib.env_setup as env_setup
 import lib.agent_setup as agent_setup
 import torch
+import numpy as np
 from tqdm import tqdm
 
 def evaluate_agent(agent, cfg, logger):
@@ -14,12 +15,16 @@ def evaluate_agent(agent, cfg, logger):
     print('EVALUATION STARTS')
     for episode in tqdm(range(cfg.num_eval_episodes)):
         obs, _ = env.reset()
-        obs, _, _, _, _ = env.step(1) # FIRE action for breakout
-        
+        # obs, _, _, _, _ = env.step(1) # FIRE action for breakout
         terminated = False
         truncated = False
+        done = 0 
+
         episode_reward = 0
         true_episode_reward = 0
+        if agent.has_memory:
+            memory = np.zeros(agent.memory_size)
+
         if cfg.log_success:
             episode_success = 0
 
@@ -27,11 +32,22 @@ def evaluate_agent(agent, cfg, logger):
             
             action = env.action_space.sample()
             with agent_setup.eval_mode(agent):
-                    action, _, _ = agent.get_action(torch.FloatTensor(obs).to(cfg.device).unsqueeze(0))
-                    action = action.detach().cpu().numpy()[0]
+                if agent.has_memory:
+                    obs_tensor = torch.FloatTensor(obs).to(cfg.device).unsqueeze(0)
+                    memory_tensor = torch.FloatTensor(memory).to(cfg.device).unsqueeze(0)
+                    mask_tensor = torch.FloatTensor(1-done).to(cfg.device).unsqueeze(0)
+                    # print(memory_tensor.shape)
+                    # print(mask_tensor.shape)
+                    action, logprob, _, value, memory = agent.get_action(obs=obs_tensor,
+                                                                        action=None,
+                                                                        memory=memory_tensor * mask_tensor)
+                    memory = memory.detach().cpu().numpy()[0]
+                else:
+                    action, logprob, _, value, _ = agent.get_action(torch.FloatTensor(obs).to(cfg.device).unsqueeze(0))
+            action = action.detach().cpu().numpy()[0]
 
             next_obs, reward, terminated, truncated, info = env.step(action)
-
+            done = terminated or truncated
             episode_reward += reward
             true_episode_reward += reward
             if cfg.log_success:

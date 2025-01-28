@@ -136,6 +136,8 @@ def save_agent(agent, replay_buffer, payload, work_dir, cfg, global_frame):
     models_dir = work_dir / cfg.models_dir / 'models'
     os.makedirs(models_dir, exist_ok=True)
 
+    if cfg.test == "OFFLINE": global_frame=cfg.offline_epochs
+
     # Save agent's models & replay buffer
     agent.save(models_dir, global_frame)
     if replay_buffer != None:
@@ -146,19 +148,27 @@ def save_agent(agent, replay_buffer, payload, work_dir, cfg, global_frame):
     
     torch.save(payload, snapshot, pickle_protocol=4)
 
-def load_agent(work_dir, cfg, agent, replay_buffer=None):
-    models_dir = work_dir / cfg.models_dir / 'models'
-    if not models_dir.exists():
-        print('NOT EXISTS:', models_dir)
-        raise FileNotFoundError()
-    
-    global_frame = cfg.num_seed_steps + cfg.num_unsup_steps
-    # snapshot = models_dir / f'snapshot_{global_frame}.pt'
-    
-    agent.load(models_dir, global_frame)
+def load_agent(work_dir, cfg, agent, replay_buffer=None, mode = None):
+    if mode == "OFFLINE": 
+        models_dir = work_dir / cfg.offline_models_dir / 'models'
+        if not models_dir.exists():
+            print('NOT EXISTS:', models_dir)
+            raise FileNotFoundError()
+        print(f'Loading OFFLINE pretrained model from: {models_dir}')
+        global_frame=cfg.offline_epochs
+    else:
+        models_dir = work_dir / cfg.models_dir / 'models'
+        if not models_dir.exists():
+            print('NOT EXISTS:', models_dir)
+            raise FileNotFoundError()
+        print(f'Loading pretrained model from: {models_dir}')
+        global_frame = cfg.num_seed_steps + cfg.num_unsup_steps
 
-    if replay_buffer != None:
-        replay_buffer.load(models_dir, global_frame)
+        # snapshot = models_dir / f'snapshot_{global_frame}.pt'
+        if replay_buffer != None:
+            replay_buffer.load(models_dir, global_frame)
+
+    agent.load(models_dir, global_frame, mode)
 
     return agent, replay_buffer
 

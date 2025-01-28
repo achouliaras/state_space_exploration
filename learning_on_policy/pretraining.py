@@ -100,7 +100,8 @@ class Workspace(object):
             episode_success = 0
         
         global_step = 0
-
+        true_episode_reward = 0
+        episode_length = 0
         # store train returns of recent 10 episodes
         # avg_train_true_return = deque([], maxlen=10) 
         total_time=0
@@ -113,7 +114,7 @@ class Workspace(object):
         if self.agent.has_memory:
             memory = np.zeros(self.agent.memory_size)
 
-        print('TRAINING STARTS')
+        print('PRE-TRAINING STARTS')
         for iteration in range(1, self.num_iterations+1):
             # Annealing the rate if instructed to do so.
             if self.agent.anneal_lr:
@@ -123,6 +124,7 @@ class Workspace(object):
                 
             for step in range(self.num_update_steps):
                 global_step += 1 # or num of envs
+                episode_length +=1
                 self.obs[step] = obs
                 self.dones[step] = done
                 if self.agent.has_memory:
@@ -157,17 +159,19 @@ class Workspace(object):
                 if self.agent.has_memory:
                     next_memory = memory
                 self.rewards[step] = reward
+
                 obs = next_obs
                 done = next_done
                 memory = next_memory
+                true_episode_reward += reward
                 
                 if terminated or truncated:
                     episode_time = time.time() - start_time
                     total_time += episode_time
                     self.logger.log('train/episode', self.episode, global_step)
                     self.logger.log('train/episode_reward', episode_reward, global_step)
-                    self.logger.log('train/true_episode_reward', info["episode"]["r"], global_step)
-                    self.logger.log('train/episode_length', info["episode"]["l"], global_step)
+                    self.logger.log('train/true_episode_reward', true_episode_reward, global_step)
+                    self.logger.log('train/episode_length', episode_length, global_step)
                     self.logger.log('train/duration', episode_time, global_step)
                     self.logger.log('train/total_duration', total_time, global_step)
                     if self.cfg.log_success:
@@ -180,6 +184,8 @@ class Workspace(object):
                     # episode_reward = 0
                     if self.cfg.log_success:
                         episode_success = 0
+                    true_episode_reward = 0
+                    episode_length = 0
                     self.step = step
                     self.episode += 1
                     obs, _ = self.env.reset()
@@ -189,6 +195,9 @@ class Workspace(object):
                         memory = np.zeros(self.agent.memory_size)
 
             # Pre-Training Update 
+            # if global_step % self.num_update_steps == 0:
+            # print('Actions: ',[i[0][0] for i in self.actions])
+            # print([i[0] for i in self.rewards])
             self.agent.pretrain_update([self.obs, self.actions, self.logprobs, self.values, self.rewards, self.dones], 
                               [next_obs, next_done], self.logger, global_step)
             
@@ -199,8 +208,8 @@ class Workspace(object):
         total_time += episode_time
         self.logger.log('train/episode', self.episode, global_step)
         self.logger.log('train/episode_reward', episode_reward, global_step)
-        self.logger.log('train/true_episode_reward', info["episode"]["r"], global_step)
-        self.logger.log('train/episode_length', info["episode"]["l"], global_step)
+        self.logger.log('train/true_episode_reward', true_episode_reward, global_step)
+        self.logger.log('train/episode_length', episode_length, global_step)
         self.logger.log('train/duration', episode_time, global_step)
         self.logger.log('train/total_duration', total_time, global_step)
         if self.cfg.log_success:
@@ -209,7 +218,7 @@ class Workspace(object):
 
         self.logger.dump(global_step, ty='train')
         self.env.close()
-        print('TRAINING FINISHED')
+        print('PRE-TRAINING FINISHED')
         self.logger = evaluate_agent(self.agent, self.cfg, self.logger)
         self.logger.close()
 

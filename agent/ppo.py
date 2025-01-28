@@ -219,6 +219,7 @@ class PPO(Agent):
         self.acmodel.reset_network()
         
     def train(self, training=True):
+        self.training = training
         if self.test == 'OFFLINE':
             self.offline_model.train(training=training)
         else:
@@ -294,10 +295,10 @@ class PPO(Agent):
     def save(self, model_dir, step):
         if self.test == 'OFFLINE':
             torch.save(
-                self.offline_model.network.state_dict(), '%s/encoder%s.pt' % (model_dir, step)
+                self.offline_model.network.state_dict(), '%s/encoder_%s.pt' % (model_dir, step)
             )
             torch.save(
-                self.offline_model.decoder.state_dict(), '%s/decoder%s.pt' % (model_dir, step)
+                self.offline_model.decoder.state_dict(), '%s/decoder_%s.pt' % (model_dir, step)
             )
         else:
             torch.save(
@@ -307,20 +308,35 @@ class PPO(Agent):
                 self.acmodel.critic.state_dict(), '%s/critic_%s.pt' % (model_dir, step)
             )
             torch.save(
-                self.acmodel.network.state_dict(), '%s/encoder%s.pt' % (model_dir, step)
+                self.acmodel.network.state_dict(), '%s/encoder_%s.pt' % (model_dir, step)
             )
         
-    def load(self, model_dir, step):
+    def load(self, model_dir, step, mode = None):
         self.acmodel.network.load_state_dict(
-            torch.load('%s/encoder%s.pt' % (model_dir, step))
-        )
-        self.acmodel.actor.load_state_dict(
-            torch.load('%s/actor_%s.pt' % (model_dir, step))
-        )
-        self.acmodel.critic.load_state_dict(
-            torch.load('%s/critic_%s.pt' % (model_dir, step))
+            torch.load('%s/encoder_%s.pt' % (model_dir, step))
         )
         
+        if mode != 'OFFLINE':
+            self.acmodel.actor.load_state_dict(
+                torch.load('%s/actor_%s.pt' % (model_dir, step))
+            )
+            self.acmodel.critic.load_state_dict(
+                torch.load('%s/critic_%s.pt' % (model_dir, step))
+            )
+        
+    def freeze_models(self, mode = None):
+        if mode == 'OFFLINE':
+            for p in self.acmodel.network.parameters():
+                p.requires_grad = False
+        elif mode == None:
+            return
+        else:
+            model_name=getattr(self.acmodel, mode, None)
+            if model_name is None:
+                print(f"No model named '{model_name}' found.")
+                return
+            for p in model_name.parameters():
+                p.requires_grad = False
 
     def offline_update(self, trajectory, logger, step):
         batch_size = self.batch_size * 4
