@@ -50,8 +50,8 @@ class Workspace(object):
         self.agent = agent_setup.create_agent(cfg)
         
         # Load AGENT
-        # self.agent, _ = agent_setup.load_agent(self.work_dir, self.cfg, self.agent, mode='OFFLINE')
-        # self.agent.freeze_models(mode='OFFLINE')
+        self.agent, _ = agent_setup.load_agent(self.work_dir, self.cfg, self.agent, mode='OFFLINE')
+        self.agent.freeze_models(mode='OFFLINE')
         # self.agent.reset_critic()
 
         # If you add parallel envs adjust size
