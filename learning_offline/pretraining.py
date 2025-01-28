@@ -133,6 +133,7 @@ class Workspace(object):
         
 @hydra.main(version_base=None, config_path="../config", config_name='themis_offline_pretrain')
 def main(cfg : DictConfig):
+    print(f'Device used CUDA:{torch.cuda.is_available()}, MPS:{torch.backends.mps.is_available()}')
     work_dir = Path.cwd()
     # cfg.output_dir = work_dir / cfg.output_dir  
     

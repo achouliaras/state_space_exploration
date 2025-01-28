@@ -103,7 +103,7 @@ def make_env(cfg, render_mode=None):
 
         # minigrid.register_minigrid_envs()
         # gym.pprint_registry()
-        #Helper function to create MiniGrid environment
+        # Helper function to create MiniGrid environment
         id = cfg.domain+'-'+cfg.env
         if cfg.max_episode_steps:
             env = gym.make(id=id, render_mode=render_mode, max_steps=cfg.max_episode_steps)
