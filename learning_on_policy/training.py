@@ -50,7 +50,7 @@ class Workspace(object):
         self.agent = agent_setup.create_agent(cfg)
         
         # Load AGENT
-        self.agent, _ = agent_setup.load_agent(self.work_dir, self.cfg, self.agent, mode='OFFLINE')
+        # self.agent, _ = agent_setup.load_agent(self.work_dir, self.cfg, self.agent, mode='OFFLINE')
         # self.agent.freeze_models(mode='OFFLINE')
         # self.agent.reset_critic()
 
@@ -222,6 +222,7 @@ class Workspace(object):
         
 @hydra.main(version_base=None, config_path="../config", config_name='themis_train_on_policy')
 def main(cfg : DictConfig):
+    print(f'Device used CUDA:{torch.cuda.is_available()}, MPS:{torch.backends.mps.is_available()}')
     work_dir = Path.cwd()
     # cfg.output_dir = work_dir / cfg.output_dir  
     

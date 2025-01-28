@@ -186,7 +186,7 @@ class PPO(Agent):
                                 latent_dim = self.latent_dim,
                                 architecture=self.architecture,
                                 mode=mode)
-            
+            self.offline_model.to(self.device)
             self.offline_optimizer = torch.optim.Adam(self.offline_model.parameters(), lr=self.lr) # CHECK
             self.offline_loss_fn = nn.MSELoss()
         else:
@@ -196,8 +196,7 @@ class PPO(Agent):
                                latent_dim = self.latent_dim,
                                architecture=self.architecture,
                                mode=mode)
-        
-            # optimizers
+            self.acmodel.to(self.device)
             self.optimizer = torch.optim.Adam(self.acmodel.parameters(), lr=self.lr, eps=1e-08) # CHECK
 
         # change mode
