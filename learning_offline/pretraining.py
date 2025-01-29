@@ -103,10 +103,7 @@ class Workspace(object):
                 next_obs, _ = self.env.reset()
                 # next_obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
             
-            self.obs[global_step]=obs
-            self.actions[global_step]=action
-            self.rewards[global_step]=reward
-            self.dones[global_step]=done
+            self.trajectory.append([obs,action,reward,done,next_obs]) # Pre allocate memory for all data
             obs = next_obs
 
         print(f'DATA GENERATED: Steps:{global_step+1}, Episodes:{self.episode}, Time:{self.total_time} sec')

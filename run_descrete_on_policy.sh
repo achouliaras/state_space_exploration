@@ -10,7 +10,7 @@ num_train_steps=100100
 episodes_2_generate=16 
 export PYTORCH_ENABLE_MPS_FALLBACK=1
 
-device=cuda
+device=cpu
 # Get the number of available CPU cores
 # num_cores=$(sysctl -n hw.physicalcpu)
 num_cores=4
