@@ -325,8 +325,9 @@ class PPO(Agent):
         
     def freeze_models(self, mode = None):
         if mode == 'OFFLINE':
-            for p in self.acmodel.network.parameters():
-                p.requires_grad = False
+            self.acmodel.network.eval()
+            # for p in self.acmodel.network.parameters():
+            #     p.requires_grad = False
         elif mode == None:
             return
         else:
@@ -338,37 +339,51 @@ class PPO(Agent):
                 p.requires_grad = False
 
     def offline_update(self, trajectory, logger, step):
-        batch_size = self.batch_size * 4
+        batch_size = self.batch_size * 2
         epoch_loss = 0
         no_batches = int(len(trajectory) // batch_size)
 
+        sequence_ids = list(range(0, len(trajectory)-self.sequence_length, self.sequence_length))
+        
         for _ in range(no_batches):
-            batch = random.sample(trajectory, batch_size)
-            s_t, a_t, r_t, s_t1 = zip(*batch)
+            batch_ids = random.sample(sequence_ids, batch_size)
             
-            s_t = torch.tensor(np.stack(s_t), dtype=torch.float32) / 255.0
-            s_t1 = torch.tensor(np.stack(s_t1), dtype=torch.float32) / 255.0
-            
-            # Convert data to sequences
-            
-            suffled_sequences = np.arange(0, batch_size, self.sequence_length)
-            np.random.shuffle(suffled_sequences)
+            # Consider using numpy arrays
+            batch = []
+            for i in batch_ids:
+                for j in range(self.sequence_length):
+                    batch.append(trajectory[i+j]) 
+            # Consider using numpy arrays
 
-            for sequence in suffled_sequences: 
+            obs_t, action_t, reward_t, done_t, obs_t1 = zip(*batch)
+            
+            obs_t = torch.tensor(np.stack(obs_t), dtype=torch.float32)
+            done_t = torch.Tensor(done_t).to(self.device)
+            obs_t1 = torch.tensor(np.stack(obs_t1), dtype=torch.float32)
+            # print('Obs Shape=',obs_t.shape)
+            # print('Done Shape=',done_t.shape)
+
+            memories = np.zeros([batch_size*self.sequence_length,self.memory_size[0]])
+            # print('Memory Shape=',memories.shape)
+
+            for sequence in range(batch_size): 
                 # print(f'    Sequence: {sequence}')
                 batch_loss = 0
-                memory = np.zeros(self.memory_size)
-                
+
                 for i in range(sequence, sequence+self.sequence_length):
-                    obs = s_t[i].to(self.device).unsqueeze(0)
-                    memory_tensor = torch.FloatTensor(memory).to(self.device).unsqueeze(0)
+                    obs = obs_t[i].to(self.device).unsqueeze(0)
+                    memory_tensor = torch.FloatTensor(memories[i]).to(self.device).unsqueeze(0)
+                    mask_tensor = (1-done_t[i]).to(self.device).unsqueeze(0)
                     
-                    prediction_obs, embedding, memory,  = self.offline_model(obs, memory_tensor)
+                    prediction_obs, embedding, memory,  = self.offline_model(obs, memory_tensor * mask_tensor)
+                    memory = memory.detach().cpu().numpy()[0]
 
                     loss = self.offline_loss_fn(prediction_obs, obs)
                     batch_loss += loss
 
-                    memory = memory.detach().cpu().numpy()[0]
+                    if self.has_memory and i < sequence + self.sequence_length-1:
+                        memories[i + 1] = memory
+                    
                 batch_loss /= self.sequence_length
             
             self.offline_optimizer.zero_grad()
@@ -479,10 +494,10 @@ class PPO(Agent):
                     for i in range(sequence, sequence+self.sequence_length):                  
                         # print(f'      i: {i}')
 
-                        obs_tensor = torch.FloatTensor(b_obs[i]).to(self.device).unsqueeze(0)
+                        obs_tensor = b_obs[i].unsqueeze(0)
                         if self.has_memory:
-                            memory_tensor = torch.FloatTensor(b_memories[i]).to(self.device).unsqueeze(0)
-                            mask_tensor = torch.FloatTensor(1-b_dones[i]).to(self.device).unsqueeze(0)
+                            memory_tensor = b_memories[i].unsqueeze(0)
+                            mask_tensor = (1-b_dones[i]).to(self.device).unsqueeze(0)
 
                             _, newlogprob, entropy, newvalue, memory = self.get_action(obs_tensor, b_actions.long()[i], memory_tensor * mask_tensor)
                         else:
