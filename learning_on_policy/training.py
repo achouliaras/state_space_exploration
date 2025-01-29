@@ -176,7 +176,7 @@ class Workspace(object):
                         episode_success = 0
                     true_episode_reward = 0
                     episode_length = 0
-                    self.step = step
+                    self.step = global_step
                     self.episode += 1
                     obs, _ = self.env.reset()
                     # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
