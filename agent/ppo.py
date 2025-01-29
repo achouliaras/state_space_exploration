@@ -338,6 +338,9 @@ class PPO(Agent):
             self.acmodel.network.eval()
             # for p in self.acmodel.network.parameters():
             #     p.requires_grad = False
+            self.acmodel.network.eval()
+            # for p in self.acmodel.network.parameters():
+            #     p.requires_grad = False
         elif mode == None:
             return
         else:
@@ -348,6 +351,8 @@ class PPO(Agent):
             for p in model_name.parameters():
                 p.requires_grad = False
 
+    def offline_update(self, trajectory, logger, step):
+        batch_size = self.batch_size * 2
     # Add Imitation Learning Options
     def offline_update(self, trajectory, logger, steps):
         batch_size = self.batch_size * 4
@@ -388,6 +393,15 @@ class PPO(Agent):
                 mask_tensor = not_done_t[i]
                 
                 prediction_obs, _, memory,  = self.offline_model(obs_tensor, memory_tensor * mask_tensor)
+                batch_loss = 0
+
+                for i in range(sequence, sequence+self.sequence_length):
+                    obs = obs_t[i].to(self.device).unsqueeze(0)
+                    memory_tensor = torch.FloatTensor(memories[i]).to(self.device).unsqueeze(0)
+                    mask_tensor = (1-done_t[i]).to(self.device).unsqueeze(0)
+                    
+                    prediction_obs, embedding, memory,  = self.offline_model(obs, memory_tensor * mask_tensor)
+                    memory = memory.detach().cpu().numpy()[0]
 
                 if self.has_memory and i < self.sequence_length-1:
                     memories[i + 1] = memory.detach()
