@@ -358,53 +358,54 @@ class PPO(Agent):
             for p in model_name.parameters():
                 p.requires_grad = False
 
-    def offline_update(self, trajectory, logger, step):
-        batch_size = self.batch_size * 2
+    # Add Imitation Learning Options
+    def offline_update(self, trajectory, logger, steps):
+        batch_size = self.batch_size * 4
         epoch_loss = 0
-        no_batches = int(len(trajectory) // batch_size)
-
-        sequence_ids = list(range(0, len(trajectory)-self.sequence_length, self.sequence_length))
+                
+        obs, actions, rewards, dones = trajectory
+        not_dones_t = 1 - dones
+        
+        sequence_ids = list(range(0, steps-self.sequence_length,self.sequence_length))
+        no_batches = int(len(sequence_ids) // batch_size)
         
         for _ in range(no_batches):
-            batch_ids = random.sample(sequence_ids, batch_size)
+            sample_ids = np.random.choice(sequence_ids, batch_size, replace=False)
+            batch_ids = np.repeat(sample_ids, self.sequence_length) + np.tile(np.arange(self.sequence_length), len(sample_ids))
             
-            # Consider using numpy arrays
-            batch = []
-            for i in batch_ids:
-                for j in range(self.sequence_length):
-                    batch.append(trajectory[i+j]) 
-            # Consider using numpy arrays
-
-            obs_t, action_t, reward_t, done_t, obs_t1 = zip(*batch)
+            obs_t = obs[batch_ids]
+            # action_t = actions[batch_ids]
+            # reward_t = rewards[batch_ids]
+            not_done_t = not_dones_t[batch_ids]
             
-            obs_t = torch.tensor(np.stack(obs_t), dtype=torch.float32)
-            done_t = torch.Tensor(done_t).to(self.device)
-            obs_t1 = torch.tensor(np.stack(obs_t1), dtype=torch.float32)
-            # print('Obs Shape=',obs_t.shape)
-            # print('Done Shape=',done_t.shape)
+            obs_t = torch.tensor(obs_t.reshape((self.sequence_length, batch_size) + tuple(self.obs_dim)), dtype=torch.float32).to(self.device)
+            # action_t = torch.tensor(obs_t.reshape((self.sequence_length, batch_size), dtype=torch.float32).to(self.device)
+            not_done_t = torch.Tensor(not_done_t.reshape((self.sequence_length, batch_size, 1))).to(self.device)
+            memories = torch.zeros((self.sequence_length, batch_size, self.memory_size[0]),dtype=torch.float32).to(self.device)
 
-            memories = np.zeros([batch_size*self.sequence_length,self.memory_size[0]])
+            # print('Obs=',obs_t.shape)
+            # print('Not Done Shape=', not_done_t.shape)
             # print('Memory Shape=',memories.shape)
 
-            for sequence in range(batch_size): 
+            # for sequence in range(batch_size): 
                 # print(f'    Sequence: {sequence}')
-                batch_loss = 0
+            batch_loss = 0
 
-                for i in range(sequence, sequence+self.sequence_length):
-                    obs = obs_t[i].to(self.device).unsqueeze(0)
-                    memory_tensor = torch.FloatTensor(memories[i]).to(self.device).unsqueeze(0)
-                    mask_tensor = (1-done_t[i]).to(self.device).unsqueeze(0)
-                    
-                    prediction_obs, embedding, memory,  = self.offline_model(obs, memory_tensor * mask_tensor)
-                    memory = memory.detach().cpu().numpy()[0]
+            # for i in range(sequence, sequence+self.sequence_length):
+            for i in range(0, self.sequence_length):
+                obs_tensor = obs_t[i]
+                memory_tensor = memories[i]
+                mask_tensor = not_done_t[i]
+                
+                prediction_obs, _, memory,  = self.offline_model(obs_tensor, memory_tensor * mask_tensor)
 
-                    loss = self.offline_loss_fn(prediction_obs, obs)
-                    batch_loss += loss
+                if self.has_memory and i < self.sequence_length-1:
+                    memories[i + 1] = memory.detach()
 
-                    if self.has_memory and i < sequence + self.sequence_length-1:
-                        memories[i + 1] = memory
-                    
-                batch_loss /= self.sequence_length
+                loss = self.offline_loss_fn(prediction_obs, obs_tensor)
+                batch_loss += loss
+                
+            # batch_loss /= self.sequence_length * batch_size
             
             self.offline_optimizer.zero_grad()
             batch_loss.backward()
