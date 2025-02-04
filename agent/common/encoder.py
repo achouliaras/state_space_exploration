@@ -22,6 +22,7 @@ class Encoder(nn.Module):
 
         if 'LSTM' in architecture:
             self.memory_module = utils.lstm(self.image_embedding_size, self.semi_memory_size)
+            # self.memory_norm = nn.LayerNorm(self.semi_memory_size)
 
         self.outputs = dict()
 
@@ -49,15 +50,23 @@ class Encoder(nn.Module):
             # print('MLP')
         # print(f'output: {x[0]}')
         # x = x.reshape(x.shape[0], -1)
-        
+
+        if torch.isnan(memory).any(): print(f"Input memory contains NaN!: {memory}")
+        if torch.isinf(memory).any(): print(f"Input memory contain Inf!: {memory}")
+
         if 'LSTM' in self.architecture:
             hidden = (memory[:, :self.semi_memory_size], memory[:, self.semi_memory_size:])
-            hidden = self.memory_module(x, hidden)
-            embedding = hidden[0]
-            memory = torch.cat(hidden, dim=1)
+            hidden, cell = self.memory_module(x, hidden)
+            # hidden = self.memory_norm(hidden)
+            # cell = self.memory_norm(cell)
+            embedding = hidden
+            memory = torch.cat((hidden, cell), dim=1)
         else:
             embedding = x
         
+        if (torch.any(torch.isnan(embedding))):
+            print('Emb=', embedding)
+            print('Mem=', memory)
         return embedding, memory
 
     def log(self, logger, step):
