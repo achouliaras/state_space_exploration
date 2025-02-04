@@ -51,7 +51,7 @@ class Workspace(object):
         
         # Load AGENT
         # self.agent, _ = agent_setup.load_agent(self.work_dir, self.cfg, self.agent, mode='OFFLINE')
-        # self.agent.freeze_models(mode='OFFLINE')
+        # self.agent.freeze_models(mode='OFFLINE') # Has error makes model output Nans
         # self.agent.reset_critic()
 
         # If you add parallel envs adjust size
