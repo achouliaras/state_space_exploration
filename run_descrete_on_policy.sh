@@ -4,13 +4,13 @@ test_name=Vanilla #Vanilla #Pre-Offline #NoMemory
 domain=MiniGrid # highway-env # ALE
 env=Empty-8x8-v0 #Empty-5x5-v0 #BlockedUnlockPickup-v0 # highway-v0 # Breakout-v5
 architecture=CNN-LSTM
-offline_num_seed_steps=5e3
+offline_num_seed_steps=5e4
 offline_epochs=100
 num_train_steps=100100
 episodes_2_generate=16 
 export PYTORCH_ENABLE_MPS_FALLBACK=1
 
-device=cpu
+device=cuda
 # Get the number of available CPU cores
 # num_cores=$(sysctl -n hw.physicalcpu)
 num_cores=4
@@ -18,7 +18,7 @@ num_cores=4
 # Calculate episodes per process to generate
 episodes_per_core=$(($episodes_2_generate / $num_cores))
 
-# Offline Training script
+# # Offline Training script
 # python -m learning_offline.pretraining device=$device \
 #        domain=$domain env=$env render_mode=rgb_array max_episode_steps=100 seed=$seed \
 #        architecture=$architecture offline_epochs=$offline_epochs \
