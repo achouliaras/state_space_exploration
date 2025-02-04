@@ -50,6 +50,8 @@ class Workspace(object):
         
         self.agent = agent_setup.create_agent(cfg)
         
+        self.num_seed_steps = int(self.cfg.num_seed_steps)
+
         # for logging
         self.total_feedback = 0
         self.labeled_feedback = 0
@@ -57,7 +59,11 @@ class Workspace(object):
         self.episode=0
         self.interactions=0
         
-        self.trajectory=[]
+        self.obs = np.zeros((self.num_seed_steps, 1) + self.obs_space.shape)
+        self.actions = np.zeros((self.num_seed_steps, 1) + self.cfg.action_space)
+        self.logprobs = np.zeros((self.num_seed_steps, 1))
+        self.rewards = np.zeros((self.num_seed_steps, 1))
+        self.dones = np.zeros((self.num_seed_steps, 1))
         print('INIT COMPLETE')
         
     @property
@@ -80,7 +86,7 @@ class Workspace(object):
         # obs, _ = self.env.reset()
         # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
 
-        for global_step in tqdm(range(int(self.cfg.num_seed_steps+1)), desc="GENERATING DATA: "):
+        for global_step in tqdm(range(self.num_seed_steps), desc="GENERATING DATA: "):
             # sample action for data collection
             action = self.env.action_space.sample()
             
@@ -96,10 +102,13 @@ class Workspace(object):
                 next_obs, _ = self.env.reset()
                 # next_obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
             
-            self.trajectory.append([obs,action,reward,done,next_obs]) # Pre allocate memory for all data
+            self.obs[global_step]=obs
+            self.actions[global_step]=action
+            self.rewards[global_step]=reward
+            self.dones[global_step]=done
             obs = next_obs
 
-        print(f'DATA GENERATED: Steps:{global_step}, Episodes:{self.episode}, Time:{self.total_time} sec')
+        print(f'DATA GENERATED: Steps:{global_step+1}, Episodes:{self.episode}, Time:{self.total_time} sec')
 
     def run(self):
         print('OFFLINE PRETRAINING STARTS')
@@ -107,10 +116,10 @@ class Workspace(object):
         # Training Loop
         for epoch in tqdm(range(self.cfg.offline_epochs), desc="Training Auto-Encoder: "):
             # Pre-Training Update 
-            loss = self.agent.offline_update(self.trajectory, self.logger, epoch*self.cfg.max_episode_steps)
+            loss = self.agent.offline_update([self.obs, self.actions, self.rewards, self.dones], self.logger, self.num_seed_steps)
             
             if epoch % 10 == 0:
-                print(f"Epoch {epoch}, Loss: {100 * loss:.6f} %")
+                print(f"Epoch {epoch}, Loss: {loss:.6f}")
         print(f"Epoch {epoch}, Loss: {loss}")
 
         episode_time = time.time() - start_time
