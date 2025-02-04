@@ -15,7 +15,7 @@ class SimpleCritic(nn.Module):
             
         elif self.action_type == 'Discrete':
             self.actor = utils.mlp(np.array(input_dim).prod(), np.prod(output_dim), 
-                                   hidden_depth, hidden_dim, activation=nn.ReLU)
+                                   hidden_depth, hidden_dim, activation=nn.ReLU, w_init_std=1)
         else:
             raise NotImplementedError
         

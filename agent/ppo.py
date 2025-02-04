@@ -70,9 +70,12 @@ class ACModel(nn.Module):
             raise NotImplementedError
         return actor
     
-    def reset_actor_critic(self):
+    def reset_actor(self):
         # reset actor and critic
         self.actor = self.create_actor()
+    
+    def reset_critic(self):
+        # reset actor and critic
         self.critic = self.create_critic()
 
     def reset_network(self):
@@ -209,9 +212,13 @@ class PPO(Agent):
         else:
             return (self.acmodel.network.memory_size,)
         
-    def reset_actor_critic(self):
+    def reset_actor(self):
         # reset actor and critic
-        self.acmodel.reset_actor_critic()
+        self.acmodel.reset_actor()
+    
+    def reset_critic(self):
+        # reset actor and critic
+        self.acmodel.reset_critic()
 
     def reset_network(self):
         # reset network
@@ -338,53 +345,54 @@ class PPO(Agent):
             for p in model_name.parameters():
                 p.requires_grad = False
 
-    def offline_update(self, trajectory, logger, step):
-        batch_size = self.batch_size * 2
+    # Add Imitation Learning Options
+    def offline_update(self, trajectory, logger, steps):
+        batch_size = self.batch_size * 4
         epoch_loss = 0
-        no_batches = int(len(trajectory) // batch_size)
-
-        sequence_ids = list(range(0, len(trajectory)-self.sequence_length, self.sequence_length))
+                
+        obs, actions, rewards, dones = trajectory
+        not_dones_t = 1 - dones
         
+        sequence_ids = list(range(0, steps-self.sequence_length,self.sequence_length))
+        no_batches = int(len(sequence_ids) // batch_size)
+
         for _ in range(no_batches):
-            batch_ids = random.sample(sequence_ids, batch_size)
+            sample_ids = np.random.choice(sequence_ids, batch_size, replace=False)
+            batch_ids = np.repeat(sample_ids, self.sequence_length) + np.tile(np.arange(self.sequence_length), len(sample_ids))
             
-            # Consider using numpy arrays
-            batch = []
-            for i in batch_ids:
-                for j in range(self.sequence_length):
-                    batch.append(trajectory[i+j]) 
-            # Consider using numpy arrays
-
-            obs_t, action_t, reward_t, done_t, obs_t1 = zip(*batch)
+            obs_t = obs[batch_ids]
+            # action_t = actions[batch_ids]
+            # reward_t = rewards[batch_ids]
+            not_done_t = not_dones_t[batch_ids]
             
-            obs_t = torch.tensor(np.stack(obs_t), dtype=torch.float32)
-            done_t = torch.Tensor(done_t).to(self.device)
-            obs_t1 = torch.tensor(np.stack(obs_t1), dtype=torch.float32)
-            # print('Obs Shape=',obs_t.shape)
-            # print('Done Shape=',done_t.shape)
+            obs_t = torch.tensor(obs_t.reshape((self.sequence_length, batch_size) + tuple(self.obs_dim)), dtype=torch.float32).to(self.device)
+            # action_t = torch.tensor(obs_t.reshape((self.sequence_length, batch_size), dtype=torch.float32).to(self.device)
+            not_done_t = torch.Tensor(not_done_t.reshape((self.sequence_length, batch_size, 1))).to(self.device)
+            memories = torch.zeros((self.sequence_length, batch_size, self.memory_size[0]),dtype=torch.float32).to(self.device)
 
-            memories = np.zeros([batch_size*self.sequence_length,self.memory_size[0]])
+            # print('Obs=',obs_t.shape)
+            # print('Not Done Shape=', not_done_t.shape)
             # print('Memory Shape=',memories.shape)
 
-            for sequence in range(batch_size): 
+            # for sequence in range(batch_size): 
                 # print(f'    Sequence: {sequence}')
-                batch_loss = 0
+            batch_loss = 0
 
-                for i in range(sequence, sequence+self.sequence_length):
-                    obs = obs_t[i].to(self.device).unsqueeze(0)
-                    memory_tensor = torch.FloatTensor(memories[i]).to(self.device).unsqueeze(0)
-                    mask_tensor = (1-done_t[i]).to(self.device).unsqueeze(0)
-                    
-                    prediction_obs, embedding, memory,  = self.offline_model(obs, memory_tensor * mask_tensor)
-                    memory = memory.detach().cpu().numpy()[0]
+            # for i in range(sequence, sequence+self.sequence_length):
+            for i in range(0, self.sequence_length):
+                obs_tensor = obs_t[i]
+                memory_tensor = memories[i]
+                mask_tensor = not_done_t[i]
+                
+                prediction_obs, _, memory,  = self.offline_model(obs_tensor, memory_tensor * mask_tensor)
 
-                    loss = self.offline_loss_fn(prediction_obs, obs)
-                    batch_loss += loss
+                if self.has_memory and i < self.sequence_length-1:
+                    memories[i + 1] = memory.detach()
 
-                    if self.has_memory and i < sequence + self.sequence_length-1:
-                        memories[i + 1] = memory
-                    
-                batch_loss /= self.sequence_length
+                loss = self.offline_loss_fn(prediction_obs, obs_tensor)
+                batch_loss += loss
+                
+            # batch_loss /= self.sequence_length * batch_size
             
             self.offline_optimizer.zero_grad()
             batch_loss.backward()
@@ -393,27 +401,183 @@ class PPO(Agent):
             epoch_loss += batch_loss.item()
         
         epoch_loss /= no_batches
-        logger.log('train_autoencoder/loss', epoch_loss, step)
+        logger.log('train_autoencoder/loss', epoch_loss, steps)
         return epoch_loss
            
     # UPDATE
-    def pretrain_update(self, replay_buffer, logger, step, total_timesteps, gradient_update=1, K=5):
-        for index in range(gradient_update):
-            obs, full_obs, action, reward, next_obs, not_done, not_done_no_max = replay_buffer.sample_state_ent(self.batch_size)
+    # Add intrinsic reward options
+    # Possibly disregard true rewards
+    # Add support for multiple actors
+    def pretrain_update(self, trajectory, next, logger, step):
+        obs, actions, logprobs, values, rewards, dones, memories = trajectory
+        next_obs, next_done, next_memory = next  
 
+        obs, actions = torch.Tensor(obs).to(self.device), torch.Tensor(actions).to(self.device)
+        logprobs, values = torch.Tensor(logprobs).to(self.device), torch.Tensor(values).to(self.device)
+        rewards, dones = torch.Tensor(rewards).to(self.device), torch.Tensor(dones).to(self.device)
+        if self.has_memory: 
+            memories = torch.Tensor(memories).to(self.device)
+        
+        next_obs = torch.Tensor(next_obs).to(self.device).unsqueeze(0)      
+        
+        if self.has_memory:
+            next_memory, next_mask = torch.Tensor(next_memory).to(self.device).unsqueeze(0), torch.Tensor([1-next_done]).to(self.device).unsqueeze(0)
+
+        # Calculate Advantages and Expected Returns
+        with torch.no_grad():
+            if self.has_memory:
+                _, next_value, _ = self.acmodel(next_obs, next_memory * next_mask)
+            else:
+                _, next_value, _ = self.acmodel(next_obs)
+            advantages = torch.zeros_like(rewards).to(self.device)
+            lastgaelam = 0
+
+            for t in reversed(range(self.num_update_steps)):
+                if t == self.num_update_steps - 1:
+                    nextnonterminal = 1.0 - next_done
+                    nextvalues = next_value
+                else:
+                    nextnonterminal = 1.0 - dones[t + 1]
+                    nextvalues = values[t + 1]
+                delta = rewards[t] + self.discount * nextvalues * nextnonterminal - values[t]
+                advantages[t] = lastgaelam = delta + self.discount * self.gae_lambda * nextnonterminal * lastgaelam
+            returns = advantages + values
+        
+        # flatten the batch
+        b_obs = obs.reshape((-1,) + tuple(self.obs_dim))
+        b_logprobs = logprobs.reshape(-1)
+        if self.action_type == 'Continuous':
+            b_actions = actions.reshape((-1,) + tuple(self.action_dim))
+        elif self.action_type == 'Discrete':
+            b_actions = actions.reshape((-1,1))
+        b_advantages = advantages.reshape(-1)
+        b_returns = returns.reshape(-1)
+        b_dones = dones.reshape(-1)
+        b_values = values.reshape(-1)
+        if self.has_memory:
+            b_memories = memories.reshape((-1,) + tuple(self.memory_size))
+        
+        self.clipfracs = []
+
+        for epoch in range(self.update_epochs):
+            # print('Epoch ', epoch)
             print_flag = False
-            if index == gradient_update -1:
-                logger.log('train/batch_reward', reward.mean(), step)
+            if epoch == self.update_epochs -1:
+                logger.log('train/batch_reward', rewards.mean(), step)
                 print_flag = True
-                
-            if step % self.critic_update_frequency == 0:
-                self.update_critic_state_ent(obs, full_obs, action, next_obs, not_done_no_max,
-                                            logger, step, K=K, print_flag=print_flag)
+            
+            suffled_minibatches = np.arange(0, self.batch_size, self.minibatch_size)
+            # np.random.shuffle(suffled_minibatches)
+            for minibatch in suffled_minibatches:
+                start = minibatch
+                end = minibatch + self.minibatch_size
+                # print(f'  Minibatch {start} - {end}')
 
-            if step % self.actor_update_frequency == 0:
-                for _ in range(self.actor_update_frequency):
-                    self.update_actor_and_alpha(obs, logger, step, print_flag)
-                    if self.action_type == 'Discrete': break # Do not update actor as in TD3 for Discrete environments
+                suffled_sequences = np.arange(start, end, self.sequence_length)
+                np.random.shuffle(suffled_sequences)
+
+                for sequence in suffled_sequences: 
+                    # print(f'    Sequence: {sequence}')
+
+                    batch_entropy = 0
+                    batch_value = 0
+                    batch_actor_loss = 0
+                    batch_critic_loss = 0
+                    batch_loss = 0
+
+                    for i in range(sequence, sequence+self.sequence_length):                  
+                        # print(f'      i: {i}')
+
+                        obs_tensor = b_obs[i].unsqueeze(0)
+                        if self.has_memory:
+                            memory_tensor = b_memories[i].unsqueeze(0)
+                            mask_tensor = (1-b_dones[i]).to(self.device).unsqueeze(0)
+
+                            _, newlogprob, entropy, newvalue, memory = self.get_action(obs_tensor, b_actions.long()[i], memory_tensor * mask_tensor)
+                        else:
+                            _, newlogprob, entropy, newvalue, _ = self.get_action(obs_tensor, b_actions.long()[i])
+                        logratio = newlogprob - b_logprobs[i]
+                        ratio = logratio.exp()
+
+                        with torch.no_grad():
+                            # calculate approx_kl http://joschu.net/blog/kl-approx.html
+                            old_approx_kl = (-logratio).mean()
+                            approx_kl = ((ratio - 1) - logratio).mean()
+                            self.clipfracs += [((ratio - 1.0).abs() > self.clip_coef).float().mean().item()]
+
+                        mb_advantages = b_advantages[i]
+                        if self.norm_adv: # Use on vector envs
+                            mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
+
+                        # Policy loss
+                        pg_loss1 = -mb_advantages * ratio
+                        pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - self.clip_coef, 1 + self.clip_coef)
+                        actor_loss = torch.max(pg_loss1, pg_loss2).mean()
+
+                        # Value loss
+                        newvalue = newvalue.view(-1)
+                        if self.clip_vloss:
+                            v_loss_unclipped = (newvalue - b_returns[i]) ** 2
+                            v_clipped = b_values[i] + torch.clamp(newvalue - b_values[i], -self.clip_coef, self.clip_coef)
+                            v_loss_clipped = (v_clipped - b_returns[i]) ** 2
+                            v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
+                            critic_loss = 0.5 * v_loss_max.mean()
+                        else:
+                            critic_loss = 0.5 * ((newvalue - b_returns[i]) ** 2).mean()
+
+                        entropy_loss = entropy.mean()
+                        loss = actor_loss - self.ent_coef * entropy_loss + critic_loss * self.vf_coef
+
+                        # print(f'  i: {i}, Loss: {loss}, Actor Loss: {actor_loss}, Critic Loss: {critic_loss}, Entropy Loss: {entropy_loss}')
+                        # Update batch values
+                        batch_entropy += entropy.item()
+                        batch_value += newvalue.mean().item()
+                        batch_actor_loss += actor_loss.item()
+                        batch_critic_loss += critic_loss.item()
+                        batch_loss += loss
+
+                        if self.has_memory and i < sequence + self.sequence_length-1:
+                            b_memories[i + 1] = memory.detach()
+
+                    # print(f'Total Loss: {batch_loss}')
+
+                    # Update batch values
+                    batch_entropy /= self.sequence_length
+                    batch_value /= self.sequence_length
+                    batch_actor_loss /= self.sequence_length
+                    batch_critic_loss /= self.sequence_length
+                    batch_loss /= self.sequence_length
+                    
+                    # print(f'Batch Loss: {batch_loss}')
+                    # Update actor-critic
+                    self.optimizer.zero_grad()
+                    batch_loss.backward()
+                    grad_norm = sum(p.grad.data.norm(2).item() ** 2 for p in self.acmodel.parameters() if p.requires_grad == True) ** 0.5
+                    torch.nn.utils.clip_grad_norm_(self.acmodel.parameters(), self.max_grad_norm)
+                    self.optimizer.step()
+
+                    # Use action to take the suitable Q value
+                    if print_flag:
+                        logger.log('train_critic/loss', critic_loss, step)
+                        logger.log('train_actor/loss', actor_loss, step)
+                        logger.log('train_actor/entropy', entropy_loss, step)
+                        logger.log('train/gradnorm', grad_norm, step)
+                        logger.log('train/batchvalue', batch_value, step)
+
+                    self.acmodel.log(logger, step)
+                
+            if self.target_kl is not None and approx_kl > self.target_kl:
+                break
+        
+        y_pred, y_true = b_values.detach().cpu().numpy(), b_returns.detach().cpu().numpy()
+        var_y = np.var(y_true)
+        explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
+
+        logger.log('train/explained_variance', explained_var, step)
+        logger.log('train/learning_rate', self.optimizer.param_groups[0]["lr"], step)
+        logger.log('train/approx_kl', approx_kl, step)
+        logger.log('train/old_approx_kl', old_approx_kl, step)
+        logger.log('train/clipfrac', np.mean(self.clipfracs), step)
  
     def update(self, trajectory, next, logger, step):
         obs, actions, logprobs, values, rewards, dones, memories = trajectory
@@ -430,6 +594,7 @@ class PPO(Agent):
         if self.has_memory:
             next_memory, next_mask = torch.Tensor(next_memory).to(self.device).unsqueeze(0), torch.Tensor([1-next_done]).to(self.device).unsqueeze(0)
 
+        # Calculate Advantages and Expected Returns
         with torch.no_grad():
             if self.has_memory:
                 _, next_value, _ = self.acmodel(next_obs, next_memory * next_mask)
