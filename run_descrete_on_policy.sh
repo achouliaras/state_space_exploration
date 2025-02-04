@@ -1,6 +1,6 @@
 # seed=$RANDOM
 seed=3
-test_name=Pre-Offline #Vanilla #Pre-Offline #NoMemory
+test_name=Vanilla #Vanilla #Pre-Offline #NoMemory
 domain=MiniGrid # highway-env # ALE
 env=Empty-8x8-v0 #Empty-5x5-v0 #BlockedUnlockPickup-v0 # highway-v0 # Breakout-v5
 architecture=CNN-LSTM
@@ -19,10 +19,10 @@ num_cores=4
 episodes_per_core=$(($episodes_2_generate / $num_cores))
 
 # Offline Training script
-python -m learning_offline.pretraining device=$device \
-       domain=$domain env=$env render_mode=rgb_array max_episode_steps=100 seed=$seed \
-       architecture=$architecture offline_epochs=$offline_epochs \
-       num_seed_steps=$offline_num_seed_steps debug=True test=OFFLINE
+# python -m learning_offline.pretraining device=$device \
+#        domain=$domain env=$env render_mode=rgb_array max_episode_steps=100 seed=$seed \
+#        architecture=$architecture offline_epochs=$offline_epochs \
+#        num_seed_steps=$offline_num_seed_steps debug=True test=OFFLINE
 
 # # Pretraining script
 # python -m learning_on_policy.pretraining device=$device \
