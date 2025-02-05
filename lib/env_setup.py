@@ -113,6 +113,7 @@ def make_env(cfg, render_mode=None):
         env = minigrid.wrappers.FullyObsWrapper(env)
         env = minigrid.wrappers.ImgObsWrapper(env)
         env = gym.wrappers.NormalizeObservation(env)
+        # env = NormalizeObservationWrapper(env, std=255.0) # Not good
         env = ReshapeObservationWrapper(env)
         env = gym.wrappers.RecordEpisodeStatistics(env, buffer_length=cfg.max_episode_steps)
         if cfg.save_video:
@@ -299,6 +300,48 @@ class ReshapeObservationWrapper(gym.ObservationWrapper):
         # Transpose observation from (W, H, C) to (C, W, H)
         observation = np.transpose(observation, (2, 0, 1))
         return observation
+
+class NormalizeObservationWrapper(gym.ObservationWrapper):
+    def __init__(self, env: gym.Env, mean: float = 0.0, std: float = 1.0):
+        """This wrapper will normalize observations s.t. each coordinate is centered with unit variance.
+
+        Args:
+            env (Env): The environment to apply the wrapper
+            epsilon: A stability parameter that is used when scaling the observations.
+        """
+        gym.Wrapper.__init__(self, env)
+
+        try:
+            self.num_envs = self.get_wrapper_attr("num_envs")
+            self.is_vector_env = self.get_wrapper_attr("is_vector_env")
+        except AttributeError:
+            self.num_envs = 1
+            self.is_vector_env = False
+
+        self.mean = mean
+        self.std = std       
+
+    def step(self, action):
+        """Steps through the environment and normalizes the observation."""
+        obs, rews, terminateds, truncateds, infos = self.env.step(action)
+        if self.is_vector_env:
+            obs = self.normalize(obs)
+        else:
+            obs = self.normalize(np.array([obs]))[0]
+        return obs, rews, terminateds, truncateds, infos
+    
+    def reset(self, **kwargs):
+        """Resets the environment and normalizes the observation."""
+        obs, info = self.env.reset(**kwargs)
+
+        if self.is_vector_env:
+            return self.normalize(obs), info
+        else:
+            return self.normalize(np.array([obs]))[0], info
+    
+    def normalize(self, obs):
+        """Normalises the observation using predifined mean and variance of the observations."""
+        return (obs - self.mean) / self.std
 
 # class RewindWrapper(gym.Wrapper):
 #     def __init__(self, env, domain):
