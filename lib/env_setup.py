@@ -112,7 +112,8 @@ def make_env(cfg, render_mode=None):
         
         env = minigrid.wrappers.FullyObsWrapper(env)
         env = minigrid.wrappers.ImgObsWrapper(env)
-        env = NormalizeObservationWrapper(env, std=255.0)
+        env = gym.wrappers.NormalizeObservation(env)
+        # env = NormalizeObservationWrapper(env, std=255.0) # Not good
         env = ReshapeObservationWrapper(env)
         env = gym.wrappers.RecordEpisodeStatistics(env, buffer_length=cfg.max_episode_steps)
         if cfg.save_video:
@@ -341,7 +342,7 @@ class NormalizeObservationWrapper(gym.ObservationWrapper):
     def normalize(self, obs):
         """Normalises the observation using predifined mean and variance of the observations."""
         return (obs - self.mean) / self.std
-    
+
 # class RewindWrapper(gym.Wrapper):
 #     def __init__(self, env, domain):
 #         super().__init__(env)

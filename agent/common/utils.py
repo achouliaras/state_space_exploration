@@ -36,6 +36,15 @@ def lstm(embedding_size, memory_size):
     # # Set forget gate bias to 1 for longer memory
     # memory_module.bias_ih[memory_size:2*memory_size].data.fill_(1.0)
     # memory_module.bias_hh[memory_size:2*memory_size].data.fill_(1.0)
+    # for name, param in memory_module.named_parameters():
+    #     if "bias" in name:
+    #         nn.init.constant_(param, 0.0)
+    #     elif "weight" in name:
+    #         # nn.init.orthogonal_(param, 1.0)
+    #         nn.init.xavier_normal_(param,gain=0.1)
+    # # Set forget gate bias to 1 for longer memory
+    # memory_module.bias_ih[memory_size:2*memory_size].data.fill_(1.0)
+    # memory_module.bias_hh[memory_size:2*memory_size].data.fill_(1.0)
     return memory_module
 
 def conv_output_size(input_size, kernel_size, stride=1, padding=0, dilation=1):
@@ -84,7 +93,6 @@ def cnn(obs_shape, n_channels, embedding_size, mode=0):
         layer_init(nn.Linear(flattened_size, embedding_size),std=0.01),
         nn.ReLU(), 
     )
-
     return feature_extractor
 
 def de_cnn(obs_shape, n_channels, embedding_size, mode=0):
@@ -123,19 +131,18 @@ def de_cnn(obs_shape, n_channels, embedding_size, mode=0):
     
 def mlp(input_dim, output_dim, hidden_depth=0, hidden_dim=0, activation = nn.ReLU, w_init_std= 0.01, output_mod=None):
 def mlp(input_dim, output_dim, hidden_depth=0, hidden_dim=0, activation = nn.ReLU, w_init_std= 0.01, output_mod=None):
+def mlp(input_dim, output_dim, hidden_depth=0, hidden_dim=0, activation = nn.ReLU, w_init_std= 0.01, output_mod=None):
     if not isinstance(input_dim, int):
         input_dim = np.prod(input_dim)
     
     if hidden_depth == 0:
         mods = [nn.Flatten(), layer_init(nn.Linear(input_dim, output_dim),std=w_init_std)]
         mods = [nn.Flatten(), layer_init(nn.Linear(input_dim, output_dim),std=w_init_std)]
+        mods = [nn.Flatten(), layer_init(nn.Linear(input_dim, output_dim),std=w_init_std)]
     else:
-        mods = [nn.Flatten(), layer_init(nn.Linear(input_dim, hidden_dim),std=w_init_std), activation(inplace=True)]
-        mods = [nn.Flatten(), layer_init(nn.Linear(input_dim, hidden_dim),std=w_init_std), activation(inplace=True)]
+        mods = [nn.Flatten(), layer_init(nn.Linear(input_dim, hidden_dim)), activation(inplace=True)]
         for i in range(hidden_depth - 1):
-            mods += [layer_init(nn.Linear(hidden_dim, hidden_dim),std=w_init_std), activation(inplace=True)]
-        mods.append(layer_init(nn.Linear(hidden_dim, output_dim),std=w_init_std))
-            mods += [layer_init(nn.Linear(hidden_dim, hidden_dim),std=w_init_std), activation(inplace=True)]
+            mods += [layer_init(nn.Linear(hidden_dim, hidden_dim)), activation(inplace=True)]
         mods.append(layer_init(nn.Linear(hidden_dim, output_dim),std=w_init_std))
     if output_mod is not None:
         mods.extend(output_mod)
