@@ -71,12 +71,8 @@ class ACModel(nn.Module):
         return actor
     
     def reset_actor(self):
-    def reset_actor(self):
         # reset actor and critic
         self.actor = self.create_actor()
-    
-    def reset_critic(self):
-        # reset actor and critic
     
     def reset_critic(self):
         # reset actor and critic
@@ -217,13 +213,7 @@ class PPO(Agent):
             return (self.acmodel.network.memory_size,)
         
     def reset_actor(self):
-    def reset_actor(self):
         # reset actor and critic
-        self.acmodel.reset_actor()
-    
-    def reset_critic(self):
-        # reset actor and critic
-        self.acmodel.reset_critic()
         self.acmodel.reset_actor()
     
     def reset_critic(self):
