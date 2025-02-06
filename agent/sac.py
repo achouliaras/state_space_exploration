@@ -4,8 +4,8 @@ import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
 from agent import Agent
 from agent.pretraining import pebble
-from agent.common.critic import DoubleQCritic
-from agent.common.actor import DiagGaussianActor, CategoricalActor
+from agent.common.actor_critic.critic_only import DoubleQCritic
+from agent.common.actor_critic.actor_only import DiagGaussianActor, CategoricalActor
 
 class SAC(Agent):
     """SAC algorithm."""

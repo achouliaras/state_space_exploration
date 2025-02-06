@@ -1,7 +1,7 @@
 # seed=$RANDOM
 # seed=1
 
-test_name=Pret_Offline_NO_Freeze #Vanilla #Pret_Offline_Freeze #NoMemory
+test_name=AE_Offline_NO_Freeze #Vanilla #Pret_Offline_Freeze #NoMemory
 domain=MiniGrid # highway-env # ALE
 env=Empty-8x8-v0 #Empty-5x5-v0 #BlockedUnlockPickup-v0 # highway-v0 # Breakout-v5
 architecture=CNN-LSTM
@@ -23,7 +23,7 @@ num_cores=4
 episodes_per_core=$(($episodes_2_generate / $num_cores))
 
 # 1 2 3 4 5 6 7 8
-for seed in 9 10; do
+for seed in 1 2 3 4 5 6 7 8 9 10; do
        # # Offline Training script
        # python -m learning_offline.pretraining device=$device \
        #        domain=$domain env=$env render_mode=rgb_array max_episode_steps=100 seed=$seed \
