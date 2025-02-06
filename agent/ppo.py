@@ -189,6 +189,7 @@ class PPO(Agent):
                                 latent_dim = self.latent_dim,
                                 architecture=self.architecture,
                                 mode=mode)
+            self.offline_model.double()
             self.offline_model.to(self.device)
             self.offline_optimizer = torch.optim.Adam(self.offline_model.parameters(), lr=self.lr) # CHECK
             self.offline_loss_fn = nn.MSELoss()
@@ -199,6 +200,7 @@ class PPO(Agent):
                                latent_dim = self.latent_dim,
                                architecture=self.architecture,
                                mode=mode)
+            self.acmodel.double()
             self.acmodel.to(self.device)
             self.optimizer = torch.optim.Adam(self.acmodel.parameters(), lr=self.lr, eps=1e-08) # CHECK
 
@@ -254,19 +256,19 @@ class PPO(Agent):
         step, K=5, print_flag=True):
         if self.action_type == 'Continuous':
             with torch.no_grad():
-                next_action, log_prob, _ = self.get_action(torch.Tensor(next_obs).to(self.device))
-                target_Q1, target_Q2 = self.critic_target(torch.Tensor(next_obs).to(self.device), action = next_action)
+                next_action, log_prob, _ = self.get_action(torch.tensor(next_obs).to(self.device))
+                target_Q1, target_Q2 = self.critic_target(torch.tensor(next_obs).to(self.device), action = next_action)
                 target_V = torch.min(target_Q1, target_Q2) - self.alpha.detach() * log_prob
                 # get current Q estimates
-            current_Q1, current_Q2 = self.critic(torch.Tensor(obs).to(self.device), action = action)
+            current_Q1, current_Q2 = self.critic(torch.tensor(obs).to(self.device), action = action)
         elif self.action_type == 'Discrete':
             with torch.no_grad():
-                _, log_prob, action_probs = self.get_action(torch.Tensor(next_obs).to(self.device))
-                target_Q1, target_Q2 = self.critic_target(torch.Tensor(next_obs).to(self.device))
+                _, log_prob, action_probs = self.get_action(torch.tensor(next_obs).to(self.device))
+                target_Q1, target_Q2 = self.critic_target(torch.tensor(next_obs).to(self.device))
                 target_V = action_probs * (torch.min(target_Q1, target_Q2) - self.alpha.detach() * log_prob)
                 target_V = target_V.sum(1).unsqueeze(-1)
                 # get current Q estimates
-            current_Q1, current_Q2 = self.critic(torch.Tensor(obs).to(self.device))
+            current_Q1, current_Q2 = self.critic(torch.tensor(obs).to(self.device))
             current_Q1 = current_Q1.gather(1, action.long())
             current_Q2 = current_Q2.gather(1, action.long())
         
@@ -365,10 +367,10 @@ class PPO(Agent):
             # reward_t = rewards[batch_ids]
             not_done_t = not_dones_t[batch_ids]
             
-            obs_t = torch.tensor(obs_t.reshape((self.sequence_length, batch_size) + tuple(self.obs_dim)), dtype=torch.float32).to(self.device)
-            # action_t = torch.tensor(obs_t.reshape((self.sequence_length, batch_size), dtype=torch.float32).to(self.device)
-            not_done_t = torch.Tensor(not_done_t.reshape((self.sequence_length, batch_size, 1))).to(self.device)
-            memories = torch.zeros((self.sequence_length, batch_size, self.memory_size[0]),dtype=torch.float32).to(self.device)
+            obs_t = torch.DoubleTensor(obs_t.reshape((self.sequence_length, batch_size) + tuple(self.obs_dim))).to(self.device)
+            # action_t = torch.DoubleTensor(obs_t.reshape((self.sequence_length, batch_size)).to(self.device)
+            not_done_t = torch.DoubleTensor(not_done_t.reshape((self.sequence_length, batch_size, 1))).to(self.device)
+            memories = torch.DoubleTensor((self.sequence_length, batch_size, self.memory_size[0])).to(self.device)
 
             # print('Obs=',obs_t.shape)
             # print('Not Done Shape=', not_done_t.shape)
@@ -412,16 +414,20 @@ class PPO(Agent):
         obs, actions, logprobs, values, rewards, dones, memories = trajectory
         next_obs, next_done, next_memory = next  
 
-        obs, actions = torch.Tensor(obs).to(self.device), torch.Tensor(actions).to(self.device)
-        logprobs, values = torch.Tensor(logprobs).to(self.device), torch.Tensor(values).to(self.device)
-        rewards, dones = torch.Tensor(rewards).to(self.device), torch.Tensor(dones).to(self.device)
+        obs = torch.DoubleTensor(obs).to(self.device)
+        actions = torch.DoubleTensor(actions).to(self.device)
+        logprobs = torch.DoubleTensor(logprobs).to(self.device)
+        values = torch.DoubleTensor(values).to(self.device)
+        rewards = torch.DoubleTensor(rewards).to(self.device)
+        dones = torch.DoubleTensor(dones).to(self.device)
         if self.has_memory: 
-            memories = torch.Tensor(memories).to(self.device)
+            memories = torch.DoubleTensor(memories).to(self.device)
         
-        next_obs = torch.Tensor(next_obs).to(self.device).unsqueeze(0)      
+        next_obs = torch.DoubleTensor(next_obs).to(self.device).unsqueeze(0)      
         
         if self.has_memory:
-            next_memory, next_mask = torch.Tensor(next_memory).to(self.device).unsqueeze(0), torch.Tensor([1-next_done]).to(self.device).unsqueeze(0)
+            next_memory = torch.DoubleTensor(next_memory).to(self.device).unsqueeze(0)
+            next_mask = torch.DoubleTensor([1-next_done]).to(self.device).unsqueeze(0)
 
         # Calculate Advantages and Expected Returns
         with torch.no_grad():
@@ -583,16 +589,20 @@ class PPO(Agent):
         obs, actions, logprobs, values, rewards, dones, memories = trajectory
         next_obs, next_done, next_memory = next  
 
-        obs, actions = torch.Tensor(obs).to(self.device), torch.Tensor(actions).to(self.device)
-        logprobs, values = torch.Tensor(logprobs).to(self.device), torch.Tensor(values).to(self.device)
-        rewards, dones = torch.Tensor(rewards).to(self.device), torch.Tensor(dones).to(self.device)
+        obs = torch.DoubleTensor(obs).to(self.device)
+        actions = torch.DoubleTensor(actions).to(self.device)
+        logprobs = torch.DoubleTensor(logprobs).to(self.device)
+        values = torch.DoubleTensor(values).to(self.device)
+        rewards = torch.DoubleTensor(rewards).to(self.device)
+        dones = torch.DoubleTensor(dones).to(self.device)
         if self.has_memory: 
-            memories = torch.Tensor(memories).to(self.device)
+            memories = torch.DoubleTensor(memories).to(self.device)
         
-        next_obs = torch.Tensor(next_obs).to(self.device).unsqueeze(0)      
+        next_obs = torch.DoubleTensor(next_obs).to(self.device).unsqueeze(0)      
         
         if self.has_memory:
-            next_memory, next_mask = torch.Tensor(next_memory).to(self.device).unsqueeze(0), torch.Tensor([1-next_done]).to(self.device).unsqueeze(0)
+            next_memory = torch.DoubleTensor(next_memory).to(self.device).unsqueeze(0)
+            next_mask = torch.DoubleTensor([1-next_done]).to(self.device).unsqueeze(0)
 
         # Calculate Advantages and Expected Returns
         with torch.no_grad():

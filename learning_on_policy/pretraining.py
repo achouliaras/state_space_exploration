@@ -238,11 +238,12 @@ def main(cfg : DictConfig):
     folder = work_dir / cfg.models_dir
     if folder.exists():
         print(f'Experiment for {cfg.agent.name}_{cfg.test} with seed {cfg.seed} seems to already exist at {cfg.models_dir}')
-        print('\nDo you want to overwrite it?')
-        answer = input('Answer: [y]/n \n')
-        while answer not in ['', 'y', 'Y', 'yes', 'Yes','n', 'Y','no','No'] :  
-            answer = input('Answer: [y]/n \n')
-        if answer in ['n','no','No']: exit()
+        print('\nOverwriting...')
+        # print('\nDo you want to overwrite it?')
+        # answer = input('Answer: [y]/n \n')
+        # while answer not in ['', 'y', 'Y', 'yes', 'Yes','n', 'Y','no','No'] :  
+        #     answer = input('Answer: [y]/n \n')
+        # if answer in ['n','no','No']: exit()
     os.makedirs(folder, exist_ok=True)
     # cfg.models_dir = work_dir / cfg.models_dir 
     workspace = Workspace(cfg, work_dir)

@@ -112,7 +112,8 @@ def make_env(cfg, render_mode=None):
         
         env = minigrid.wrappers.FullyObsWrapper(env)
         env = minigrid.wrappers.ImgObsWrapper(env)
-        env = NormalizeObservationWrapper(env, std=255.0)
+        env = gym.wrappers.NormalizeObservation(env)
+        # env = NormalizeObservationWrapper(env, std=255.0)
         env = ReshapeObservationWrapper(env)
         env = gym.wrappers.RecordEpisodeStatistics(env, buffer_length=cfg.max_episode_steps)
         if cfg.save_video:

@@ -50,8 +50,9 @@ class Workspace(object):
         self.agent = agent_setup.create_agent(cfg)
         
         # Load AGENT
-        # self.agent, _ = agent_setup.load_agent(self.work_dir, self.cfg, self.agent, mode='OFFLINE')
-        # self.agent.freeze_models(mode='OFFLINE') # Has error makes model output Nans
+        if cfg.import_model:
+            self.agent, _ = agent_setup.load_agent(self.work_dir, self.cfg, self.agent, mode=cfg.import_protocol)
+            # self.agent.freeze_models(mode=cfg.import_protocol) # Has error makes model output Nans
         # self.agent.reset_critic()
 
         # If you add parallel envs adjust size
@@ -125,9 +126,9 @@ class Workspace(object):
                 # Action logic
                 with torch.no_grad():
                     if self.agent.has_memory:
-                        obs_tensor = torch.FloatTensor(obs).to(self.device).unsqueeze(0)
-                        memory_tensor = torch.FloatTensor(memory).to(self.device).unsqueeze(0)
-                        mask_tensor = torch.FloatTensor(1-done).to(self.device).unsqueeze(0)
+                        obs_tensor = torch.DoubleTensor(obs).to(self.device).unsqueeze(0)
+                        memory_tensor = torch.DoubleTensor(memory).to(self.device).unsqueeze(0)
+                        mask_tensor = torch.DoubleTensor(1-done).to(self.device).unsqueeze(0)
                         # print(memory_tensor.shape)
                         # print(mask_tensor.shape)
                         action, logprob, _, value, memory = self.agent.get_action(obs=obs_tensor,
@@ -135,7 +136,7 @@ class Workspace(object):
                                                                           memory=memory_tensor * mask_tensor)
                         memory = memory.detach().cpu().numpy()[0]
                     else:
-                        action, logprob, _, value, _ = self.agent.get_action(torch.FloatTensor(obs).to(self.device).unsqueeze(0))
+                        action, logprob, _, value, _ = self.agent.get_action(torch.DoubleTensor(obs).to(self.device).unsqueeze(0))
                 action = action.detach().cpu().numpy()[0]
                 
                 self.actions[step] = action
@@ -229,11 +230,12 @@ def main(cfg : DictConfig):
     folder = work_dir / cfg.models_dir
     if folder.exists():
         print(f'Experiment for {cfg.agent.name}_{cfg.test} with seed {cfg.seed} seems to already exist at {cfg.models_dir}')
-        print('\nDo you want to overwrite it?')
-        answer = input('Answer: [y]/n \n')
-        while answer not in ['', 'y', 'Y', 'yes', 'Yes','n', 'Y','no','No'] :  
-            answer = input('Answer: [y]/n \n')
-        if answer in ['n','no','No']: exit()
+        print('\nOverwriting...')
+        # print('\nDo you want to overwrite it?')
+        # answer = input('Answer: [y]/n \n')
+        # while answer not in ['', 'y', 'Y', 'yes', 'Yes','n', 'Y','no','No'] :  
+        #     answer = input('Answer: [y]/n \n')
+        # if answer in ['n','no','No']: exit()
     os.makedirs(folder, exist_ok=True)
     # cfg.models_dir = work_dir / cfg.models_dir 
     workspace = Workspace(cfg, work_dir)

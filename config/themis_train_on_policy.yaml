@@ -14,6 +14,9 @@ num_train_steps: 5e5 #1e6 for continuous
 # replay_buffer_capacity: 1e4 #1e6
 deploy_mode: False
 
+import_model: True
+import_protocol: OFFLINE
+
 # unsup training
 gradient_update: 1
 topK: 5
