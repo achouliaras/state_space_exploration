@@ -105,7 +105,7 @@ def create_agent(cfg, obs_space=None):
                     mode= cfg.mode, 
                     learnable_temperature = cfg.agent.learnable_temperature,
                     normalize_state_entropy = True)
-        if cfg.deploy_mode == False:
+        if cfg.deploy_mode:
             replay_buffer = ReplayBuffer(
                     obs_space,
                     cfg.agent.obs_shape,
@@ -125,19 +125,20 @@ def create_agent(cfg, obs_space=None):
                     state_type=cfg.state_type, 
                     agent_cfg = cfg.agent,
                     action_cfg = cfg.agent.action_cfg, 
-                    test = cfg.test,
+                    import_protocol = cfg.import_protocol,
+                    deploy_mode = cfg.deploy_mode,
                     mode= cfg.mode,
                     normalize_state_entropy = True)
         return agent
     else:
         raise NotImplementedError   
 
-def save_agent(agent, replay_buffer, payload, work_dir, cfg, global_frame):
+def save_agent(agent, replay_buffer, payload, work_dir, cfg, global_frame, mode = None):
     models_dir = work_dir / cfg.models_dir / 'models'
+    if "OFFLINE" in mode:
+        models_dir = work_dir / cfg.models_dir / 'offline_models'
+        global_frame=cfg.offline_epochs
     os.makedirs(models_dir, exist_ok=True)
-
-    if cfg.test == "OFFLINE": global_frame=cfg.offline_epochs
-
     # Save agent's models & replay buffer
     agent.save(models_dir, global_frame)
     if replay_buffer != None:
@@ -149,8 +150,8 @@ def save_agent(agent, replay_buffer, payload, work_dir, cfg, global_frame):
     torch.save(payload, snapshot, pickle_protocol=4)
 
 def load_agent(work_dir, cfg, agent, replay_buffer=None, mode = None):
-    if mode == "OFFLINE": 
-        models_dir = work_dir / cfg.offline_models_dir / 'models'
+    if "OFFLINE" in mode: 
+        models_dir = work_dir / cfg.models_dir / 'offline_models'
         if not models_dir.exists():
             print('NOT EXISTS:', models_dir)
             raise FileNotFoundError()

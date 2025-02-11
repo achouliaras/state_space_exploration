@@ -52,7 +52,7 @@ class Workspace(object):
         # Load AGENT
         if cfg.import_model:
             self.agent, _ = agent_setup.load_agent(self.work_dir, self.cfg, self.agent, mode=cfg.import_protocol)
-            # self.agent.freeze_models(mode=cfg.import_protocol) # Has error makes model output Nans
+            # self.agent.freeze_models(mode=cfg.freeze_protocol)
         # self.agent.reset_critic()
 
         # If you add parallel envs adjust size

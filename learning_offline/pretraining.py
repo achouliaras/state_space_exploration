@@ -59,11 +59,11 @@ class Workspace(object):
         self.episode=0
         self.interactions=0
         
-        self.obs = np.zeros((self.num_seed_steps, 1) + self.obs_space.shape)
+        self.obs = np.zeros((self.num_seed_steps+1, 1) + self.obs_space.shape)
         self.actions = np.zeros((self.num_seed_steps, 1) + self.cfg.action_space)
         self.logprobs = np.zeros((self.num_seed_steps, 1))
         self.rewards = np.zeros((self.num_seed_steps, 1))
-        self.dones = np.zeros((self.num_seed_steps, 1))
+        self.dones = np.zeros((self.num_seed_steps+1, 1))
         print('INIT COMPLETE')
         
     @property
@@ -100,6 +100,7 @@ class Workspace(object):
                 self.episode += 1
                 self.step = global_step
                 next_obs, _ = self.env.reset()
+
                 # next_obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
             
             self.obs[global_step]=obs
@@ -108,6 +109,10 @@ class Workspace(object):
             self.dones[global_step]=done
             obs = next_obs
 
+        last_obs = next_obs
+        self.obs[-1] = last_obs
+        last_done = done
+        self.dones[-1]=last_done
         print(f'DATA GENERATED: Steps:{global_step+1}, Episodes:{self.episode}, Time:{self.total_time} sec')
 
     def run(self):
@@ -137,7 +142,10 @@ class Workspace(object):
         keys_to_save = ['step', 'episode']
         payload = {k: self.__dict__[k] for k in keys_to_save}
         
-        agent_setup.save_agent(self.agent, None, payload, self.work_dir, self.cfg, self.cfg.offline_epochs)
+        agent_setup.save_agent(self.agent, None, payload, self.work_dir, 
+                               self.cfg, 
+                               self.cfg.offline_epochs,
+                               mode=self.cfg.import_protocol)
         print('SAVING COMPLETED')
         
 @hydra.main(version_base=None, config_path="../config", config_name='themis_offline_pretrain')

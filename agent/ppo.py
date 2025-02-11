@@ -7,19 +7,21 @@ from torch.distributions.categorical import Categorical
 from agent import Agent
 from agent.pretraining import pebble
 from agent.common.feature_extraction.autoencoder import AutoEncoder
+from agent.common.transition_model import InverseTransitionModel
 from agent.common.actor_critic.actor_critic import ACModel
 
 class PPO(Agent):
     """PPO algorithm."""
     def __init__(self, obs_dim, action_type, device, latent_dim, architecture, state_type,
-                 agent_cfg, action_cfg, test, mode=1, normalize_state_entropy=True):
+                 agent_cfg, action_cfg, import_protocol, deploy_mode, mode=1, normalize_state_entropy=True):
         super().__init__()
         self.obs_dim = obs_dim
         self.action_type = action_type
         self.device = device
         self.latent_dim = latent_dim
         self.architecture = architecture
-        self.test = test
+        self.import_protocol = import_protocol
+        self.deploy_mode = deploy_mode
 
         self.state_type = state_type
         self.action_dim = agent_cfg.action_dim
@@ -54,18 +56,7 @@ class PPO(Agent):
         self.minibatch_size =  int(self.batch_size // self.num_minibatches)
         self.batch_size_of_sequences = int(self.minibatch_size // self.sequence_length)
         
-        if self.test == 'OFFLINE':
-            self.offline_model = AutoEncoder(obs_dim=self.obs_dim,
-                                action_dim=self.action_dim,
-                                action_type=self.action_type,
-                                latent_dim = self.latent_dim,
-                                architecture=self.architecture,
-                                mode=mode)
-            self.offline_model.double()
-            self.offline_model.to(self.device)
-            self.offline_optimizer = torch.optim.Adam(self.offline_model.parameters(), lr=self.lr) # CHECK
-            self.offline_loss_fn = nn.MSELoss()
-        else:
+        if deploy_mode:
             self.acmodel = ACModel(obs_dim=self.obs_dim,
                                action_dim=self.action_dim,
                                action_type=self.action_type,
@@ -75,16 +66,42 @@ class PPO(Agent):
             self.acmodel.double()
             self.acmodel.to(self.device)
             self.optimizer = torch.optim.Adam(self.acmodel.parameters(), lr=self.lr, eps=1e-08) # CHECK
+        else:
+            # self.autoencoder = AutoEncoder(obs_dim=self.obs_dim,
+            #                     action_dim=self.action_dim,
+            #                     action_type=self.action_type,
+            #                     latent_dim = self.latent_dim,
+            #                     architecture=self.architecture,
+            #                     mode=mode)
+            # self.autoencoder.double()
+            # self.autoencoder.to(self.device)
+            # self.autoencoder_optimizer = torch.optim.Adam(self.autoencoder.parameters(), lr=self.lr) # CHECK     
+            # self.autoencoder_loss_fn = nn.MSELoss()
+
+            self.inverseMDP = InverseTransitionModel(obs_dim=self.obs_dim,
+                                                        action_dim=self.action_dim,
+                                                        action_type=self.action_type,
+                                                        latent_dim = self.latent_dim,
+                                                        architecture=self.architecture,
+                                                        mode=mode)
+            self.inverseMDP.double()
+            self.inverseMDP.to(self.device)
+            self.inverseMDP_optimizer = torch.optim.Adam(self.inverseMDP.parameters(), lr=self.lr) # CHECK
+            if self.action_type == 'Continuous': 
+                self.inverseMDP_loss_fn = nn.MSELoss()
+            elif self.action_type == 'Discrete': 
+                self.inverseMDP_loss_fn = nn.CrossEntropyLoss()
 
         # change mode
         self.train()
     
     @property
     def memory_size(self):
-        if self.test == 'OFFLINE':
-            return (self.offline_model.network.memory_size,)
-        else:
-            return (self.acmodel.network.memory_size,)
+        if self.deploy_mode:
+           return (self.acmodel.network.memory_size,)
+        else:  
+            # return (self.autoencoder.network.memory_size,)
+            return (self.inverseMDP.network.memory_size,)
         
     def reset_actor(self):
         # reset actor and critic
@@ -100,10 +117,11 @@ class PPO(Agent):
         
     def train(self, training=True):
         self.training = training
-        if self.test == 'OFFLINE':
-            self.offline_model.train(training=training)
-        else:
+        if self.deploy_mode:
             self.acmodel.train(training=training)
+        else:
+            # self.autoencoder.train(training=training)
+            self.inverseMDP.train(training=training)
 
     def get_action(self, obs, action = None, memory = None):
         if self.action_type == 'Continuous':
@@ -172,13 +190,19 @@ class PPO(Agent):
         self.optimizer.step()
         self.critic.log(logger, step)
     
-    def save(self, model_dir, step):
-        if self.test == 'OFFLINE':
+    def save(self, model_dir, step, mode=None):
+        if "OFFLINE" in mode:
+            # torch.save(
+            #     self.autoencoder.network.state_dict(), '%s/encoder_%s.pt' % (model_dir, step)
+            # )
+            # torch.save(
+            #     self.autoencoder.decoder.state_dict(), '%s/decoder_%s.pt' % (model_dir, step)
+            # )
             torch.save(
-                self.offline_model.network.state_dict(), '%s/encoder_%s.pt' % (model_dir, step)
+                self.inverseMDP.network.state_dict(), '%s/encoder_%s.pt' % (model_dir, step)
             )
             torch.save(
-                self.offline_model.decoder.state_dict(), '%s/decoder_%s.pt' % (model_dir, step)
+                self.inverseMDP.action_model.state_dict(), '%s/action_model_%s.pt' % (model_dir, step)
             )
         else:
             torch.save(
@@ -196,7 +220,7 @@ class PPO(Agent):
             torch.load('%s/encoder_%s.pt' % (model_dir, step))
         )
         
-        if mode != 'OFFLINE':
+        if "OFFLINE" not in mode:
             self.acmodel.actor.load_state_dict(
                 torch.load('%s/actor_%s.pt' % (model_dir, step))
             )
@@ -205,13 +229,19 @@ class PPO(Agent):
             )
         
     def freeze_models(self, mode = None):
-        if mode == 'OFFLINE':
-            self.acmodel.network.eval()
-            # for p in self.acmodel.network.parameters():
-            #     p.requires_grad = False
-        elif mode == None:
-            return
-        else:
+        # Freeze feature extractor from encoder (cnn/mlp)
+        if 'PART' in mode:
+            for name, p in self.acmodel.network.cnn.named_parameters():
+                p.requires_grad = False
+                if '7' in name:
+                    print('HERE ', name, p.requires_grad)
+                    p.requires_grad = True
+        # Freeze the entire encoder (cnn/mlp + lstm)
+        if 'ALL' in mode:
+            for name, p in self.acmodel.network.named_parameters():
+                p.requires_grad = False
+        # Freeze specified module actor, critic etc.
+        if mode is not None:
             model_name=getattr(self.acmodel, mode, None)
             if model_name is None:
                 print(f"No model named '{model_name}' found.")
@@ -226,51 +256,64 @@ class PPO(Agent):
                 
         obs, actions, rewards, dones = trajectory
         not_dones_t = 1 - dones
-        
-        sequence_ids = list(range(0, steps-self.sequence_length,self.sequence_length))
+
+        sequence_ids = list(range(0, steps-self.sequence_length-1,self.sequence_length))
         no_batches = int(len(sequence_ids) // batch_size)
 
         for _ in range(no_batches):
             sample_ids = np.random.choice(sequence_ids, batch_size, replace=False)
-            batch_ids = np.repeat(sample_ids, self.sequence_length) + np.tile(np.arange(self.sequence_length), len(sample_ids))
+            batch_ids = np.repeat(sample_ids, self.sequence_length+1) + np.tile(np.arange(self.sequence_length+1), len(sample_ids))
             
             obs_t = obs[batch_ids]
-            # action_t = actions[batch_ids]
+            action_t = actions[batch_ids]
             # reward_t = rewards[batch_ids]
             not_done_t = not_dones_t[batch_ids]
             
-            obs_t = torch.DoubleTensor(obs_t.reshape((self.sequence_length, batch_size) + tuple(self.obs_dim))).to(self.device)
-            # action_t = torch.DoubleTensor(obs_t.reshape((self.sequence_length, batch_size)).to(self.device)
-            not_done_t = torch.DoubleTensor(not_done_t.reshape((self.sequence_length, batch_size, 1))).to(self.device)
-            memories = torch.DoubleTensor((self.sequence_length, batch_size, self.memory_size[0])).to(self.device)
-
-            # print('Obs=',obs_t.shape)
-            # print('Not Done Shape=', not_done_t.shape)
-            # print('Memory Shape=',memories.shape)
-
-            # for sequence in range(batch_size): 
-                # print(f'    Sequence: {sequence}')
+            obs_t = torch.DoubleTensor(obs_t.reshape((self.sequence_length+1, batch_size) + tuple(self.obs_dim))).to(self.device)
+            if self.action_type == 'Continuous':
+                action_t = torch.DoubleTensor(action_t.reshape((self.sequence_length+1, batch_size)+ tuple(self.action_dim))).to(self.device)
+            elif self.action_type == 'Discrete':
+                action_t = torch.LongTensor(action_t.reshape((self.sequence_length+1, batch_size,1))).to(self.device)
+            not_done_t = torch.DoubleTensor(not_done_t.reshape((self.sequence_length+1, batch_size, 1))).to(self.device)
+            memories = torch.zeros((self.sequence_length+1, batch_size, self.memory_size[0]),dtype=torch.float64).to(self.device)
+            
             batch_loss = 0
 
-            # for i in range(sequence, sequence+self.sequence_length):
             for i in range(0, self.sequence_length):
                 obs_tensor = obs_t[i]
                 memory_tensor = memories[i]
                 mask_tensor = not_done_t[i]
+                action_tensor = action_t[i].squeeze(1)
+                next_obs_tensor = obs_t[i+1]
+                next_mask_tensor = not_done_t[i+1]
                 
-                prediction_obs, _, memory,  = self.offline_model(obs_tensor, memory_tensor * mask_tensor)
+                if self.has_memory:
+                    # prediction_obs, _, memory  = self.autoencoder(obs_tensor, memory_tensor * mask_tensor)
+                    pred_action_logprobs, memory, next_memory  = self.inverseMDP(obs_tensor, next_obs_tensor, 
+                                                                              memory_tensor * mask_tensor,
+                                                                              next_mask_tensor)
+                else:
+                    # prediction_obs, _, memory,  = self.autoencoder(obs_tensor)
+                    pred_action_logprobs, memory, next_memory  = self.inverseMDP(obs_tensor, next_obs_tensor)
 
                 if self.has_memory and i < self.sequence_length-1:
                     memories[i + 1] = memory.detach()
+                    memories[i + 2] = next_memory.detach()
 
-                loss = self.offline_loss_fn(prediction_obs, obs_tensor)
-                batch_loss += loss
+                # loss = self.autoencoder_loss_fn(prediction_obs, obs_tensor)
+
+                loss = self.inverseMDP_loss_fn(pred_action_logprobs, action_tensor)
                 
-            # batch_loss /= self.sequence_length * batch_size
-            
-            self.offline_optimizer.zero_grad()
+                batch_loss += loss
+
+            batch_loss = batch_loss/self.sequence_length
+            # self.autoencoder_optimizer.zero_grad()
+            # batch_loss.backward()
+            # self.autoencoder_optimizer.step()
+
+            self.inverseMDP_optimizer.zero_grad()
             batch_loss.backward()
-            self.offline_optimizer.step()
+            self.inverseMDP_optimizer.step()
 
             epoch_loss += batch_loss.item()
         
