@@ -1,15 +1,15 @@
 # seed=$RANDOM
 # seed=1
 
-test_name=IMDP_Offline_NO_Freeze #Vanilla #Pret_Offline_Freeze #NoMemory
+test_name=AE_Offline_Freeze #Vanilla #Pret_Offline_Freeze #NoMemory
 domain=MiniGrid # highway-env # ALE
 env=Empty-8x8-v0 #Empty-5x5-v0 #BlockedUnlockPickup-v0 # highway-v0 # Breakout-v5
 architecture=CNN-LSTM
 offline_num_seed_steps=5e4
 offline_epochs=100
 import_model=True
-import_protocol=OFFLINE
-freeze_protocol=PART
+import_protocol=OFFLINE # NORMAL, OFFLINE, ONLINE
+freeze_protocol=ALL # NO, CNN-PART, CNN, ALL
 
 num_train_steps=100100
 episodes_2_generate=16 
@@ -23,12 +23,12 @@ num_cores=4
 # Calculate episodes per process to generate
 episodes_per_core=$(($episodes_2_generate / $num_cores))
 
-# 0 1 2 3 4 5 6 7 8 9 10
-for seed in 1; do
+# 1 2 3 4 5 6 7 8 9 10
+for seed in 1 2 3 4 5 6 7 8 9 10; do
        # Offline Training script
        python -m learning_offline.pretraining device=$device \
               domain=$domain env=$env render_mode=rgb_array max_episode_steps=100 seed=$seed \
-              architecture=$architecture offline_epochs=$offline_epochs \
+              architecture=$architecture offline_epochs=$offline_epochs import_protocol=$import_protocol\
               num_seed_steps=$offline_num_seed_steps debug=True test=$test_name
 
        # # Pretraining script

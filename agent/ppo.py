@@ -67,30 +67,30 @@ class PPO(Agent):
             self.acmodel.to(self.device)
             self.optimizer = torch.optim.Adam(self.acmodel.parameters(), lr=self.lr, eps=1e-08) # CHECK
         else:
-            # self.autoencoder = AutoEncoder(obs_dim=self.obs_dim,
-            #                     action_dim=self.action_dim,
-            #                     action_type=self.action_type,
-            #                     latent_dim = self.latent_dim,
-            #                     architecture=self.architecture,
-            #                     mode=mode)
-            # self.autoencoder.double()
-            # self.autoencoder.to(self.device)
-            # self.autoencoder_optimizer = torch.optim.Adam(self.autoencoder.parameters(), lr=self.lr) # CHECK     
-            # self.autoencoder_loss_fn = nn.MSELoss()
+            self.autoencoder = AutoEncoder(obs_dim=self.obs_dim,
+                                action_dim=self.action_dim,
+                                action_type=self.action_type,
+                                latent_dim = self.latent_dim,
+                                architecture=self.architecture,
+                                mode=mode)
+            self.autoencoder.double()
+            self.autoencoder.to(self.device)
+            self.autoencoder_optimizer = torch.optim.Adam(self.autoencoder.parameters(), lr=self.lr) # CHECK     
+            self.autoencoder_loss_fn = nn.MSELoss()
 
-            self.inverseMDP = InverseTransitionModel(obs_dim=self.obs_dim,
-                                                        action_dim=self.action_dim,
-                                                        action_type=self.action_type,
-                                                        latent_dim = self.latent_dim,
-                                                        architecture=self.architecture,
-                                                        mode=mode)
-            self.inverseMDP.double()
-            self.inverseMDP.to(self.device)
-            self.inverseMDP_optimizer = torch.optim.Adam(self.inverseMDP.parameters(), lr=self.lr) # CHECK
-            if self.action_type == 'Continuous': 
-                self.inverseMDP_loss_fn = nn.MSELoss()
-            elif self.action_type == 'Discrete': 
-                self.inverseMDP_loss_fn = nn.CrossEntropyLoss()
+            # self.inverseMDP = InverseTransitionModel(obs_dim=self.obs_dim,
+            #                                             action_dim=self.action_dim,
+            #                                             action_type=self.action_type,
+            #                                             latent_dim = self.latent_dim,
+            #                                             architecture=self.architecture,
+            #                                             mode=mode)
+            # self.inverseMDP.double()
+            # self.inverseMDP.to(self.device)
+            # self.inverseMDP_optimizer = torch.optim.Adam(self.inverseMDP.parameters(), lr=self.lr) # CHECK
+            # if self.action_type == 'Continuous': 
+            #     self.inverseMDP_loss_fn = nn.MSELoss()
+            # elif self.action_type == 'Discrete': 
+            #     self.inverseMDP_loss_fn = nn.CrossEntropyLoss()
 
         # change mode
         self.train()
@@ -100,8 +100,8 @@ class PPO(Agent):
         if self.deploy_mode:
            return (self.acmodel.network.memory_size,)
         else:  
-            # return (self.autoencoder.network.memory_size,)
-            return (self.inverseMDP.network.memory_size,)
+            return (self.autoencoder.network.memory_size,)
+            # return (self.inverseMDP.network.memory_size,)
         
     def reset_actor(self):
         # reset actor and critic
@@ -120,8 +120,8 @@ class PPO(Agent):
         if self.deploy_mode:
             self.acmodel.train(training=training)
         else:
-            # self.autoencoder.train(training=training)
-            self.inverseMDP.train(training=training)
+            self.autoencoder.train(training=training)
+            # self.inverseMDP.train(training=training)
 
     def get_action(self, obs, action = None, memory = None):
         if self.action_type == 'Continuous':
@@ -190,20 +190,20 @@ class PPO(Agent):
         self.optimizer.step()
         self.critic.log(logger, step)
     
-    def save(self, model_dir, step, mode=None):
+    def save(self, model_dir, step, mode = "NORMAL"):
         if "OFFLINE" in mode:
-            # torch.save(
-            #     self.autoencoder.network.state_dict(), '%s/encoder_%s.pt' % (model_dir, step)
-            # )
-            # torch.save(
-            #     self.autoencoder.decoder.state_dict(), '%s/decoder_%s.pt' % (model_dir, step)
-            # )
             torch.save(
-                self.inverseMDP.network.state_dict(), '%s/encoder_%s.pt' % (model_dir, step)
+                self.autoencoder.network.state_dict(), '%s/encoder_%s.pt' % (model_dir, step)
             )
             torch.save(
-                self.inverseMDP.action_model.state_dict(), '%s/action_model_%s.pt' % (model_dir, step)
+                self.autoencoder.decoder.state_dict(), '%s/decoder_%s.pt' % (model_dir, step)
             )
+            # torch.save(
+            #     self.inverseMDP.network.state_dict(), '%s/encoder_%s.pt' % (model_dir, step)
+            # )
+            # torch.save(
+            #     self.inverseMDP.action_model.state_dict(), '%s/action_model_%s.pt' % (model_dir, step)
+            # )
         else:
             torch.save(
                 self.acmodel.actor.state_dict(), '%s/actor_%s.pt' % (model_dir, step)
@@ -215,7 +215,7 @@ class PPO(Agent):
                 self.acmodel.network.state_dict(), '%s/encoder_%s.pt' % (model_dir, step)
             )
         
-    def load(self, model_dir, step, mode = None):
+    def load(self, model_dir, step, mode = "NORMAL"):
         self.acmodel.network.load_state_dict(
             torch.load('%s/encoder_%s.pt' % (model_dir, step))
         )
@@ -228,12 +228,12 @@ class PPO(Agent):
                 torch.load('%s/critic_%s.pt' % (model_dir, step))
             )
         
-    def freeze_models(self, mode = None):
+    def freeze_models(self, mode = "NO"):
         # Freeze feature extractor from encoder (cnn/mlp)
-        if 'PART' in mode:
+        if 'CNN' in mode:
             for name, p in self.acmodel.network.cnn.named_parameters():
                 p.requires_grad = False
-                if '7' in name:
+                if 'PART' in mode and '7' in name:
                     print('HERE ', name, p.requires_grad)
                     p.requires_grad = True
         # Freeze the entire encoder (cnn/mlp + lstm)
@@ -241,7 +241,7 @@ class PPO(Agent):
             for name, p in self.acmodel.network.named_parameters():
                 p.requires_grad = False
         # Freeze specified module actor, critic etc.
-        if mode is not None:
+        if mode != 'NO':
             model_name=getattr(self.acmodel, mode, None)
             if model_name is None:
                 print(f"No model named '{model_name}' found.")
@@ -252,7 +252,6 @@ class PPO(Agent):
     # Add Imitation Learning Options
     def offline_update(self, trajectory, logger, steps):
         batch_size = self.batch_size * 4
-        epoch_loss = 0
                 
         obs, actions, rewards, dones = trajectory
         not_dones_t = 1 - dones
@@ -288,34 +287,35 @@ class PPO(Agent):
                 next_mask_tensor = not_done_t[i+1]
                 
                 if self.has_memory:
-                    # prediction_obs, _, memory  = self.autoencoder(obs_tensor, memory_tensor * mask_tensor)
-                    pred_action_logprobs, memory, next_memory  = self.inverseMDP(obs_tensor, next_obs_tensor, 
-                                                                              memory_tensor * mask_tensor,
-                                                                              next_mask_tensor)
+                    prediction_obs, _, memory  = self.autoencoder(obs_tensor, memory_tensor * mask_tensor)
+                    # pred_action_logprobs, memory, next_memory  = self.inverseMDP(obs_tensor, next_obs_tensor, 
+                    #                                                           memory_tensor * mask_tensor,
+                    #                                                           next_mask_tensor)
                 else:
-                    # prediction_obs, _, memory,  = self.autoencoder(obs_tensor)
-                    pred_action_logprobs, memory, next_memory  = self.inverseMDP(obs_tensor, next_obs_tensor)
+                    prediction_obs, _, memory,  = self.autoencoder(obs_tensor)
+                    # pred_action_logprobs, memory, next_memory  = self.inverseMDP(obs_tensor, next_obs_tensor)
 
                 if self.has_memory and i < self.sequence_length-1:
                     memories[i + 1] = memory.detach()
-                    memories[i + 2] = next_memory.detach()
+                    # memories[i + 2] = next_memory.detach()
 
-                # loss = self.autoencoder_loss_fn(prediction_obs, obs_tensor)
-
-                loss = self.inverseMDP_loss_fn(pred_action_logprobs, action_tensor)
+                loss = self.autoencoder_loss_fn(prediction_obs, obs_tensor)
+                # loss = self.inverseMDP_loss_fn(pred_action_logprobs, action_tensor)
                 
                 batch_loss += loss
 
             batch_loss = batch_loss/self.sequence_length
-            # self.autoencoder_optimizer.zero_grad()
-            # batch_loss.backward()
-            # self.autoencoder_optimizer.step()
-
-            self.inverseMDP_optimizer.zero_grad()
+            
+            self.autoencoder_optimizer.zero_grad()
             batch_loss.backward()
-            self.inverseMDP_optimizer.step()
+            self.autoencoder_optimizer.step()
 
-            epoch_loss += batch_loss.item()
+            # self.inverseMDP_optimizer.zero_grad()
+            # batch_loss.backward()
+            # self.inverseMDP_optimizer.step()
+
+        # consider only the last batch for reporting the final loss for each epoch
+        epoch_loss = batch_loss.item()
         
         epoch_loss /= no_batches
         logger.log('train_autoencoder/loss', epoch_loss, steps)
