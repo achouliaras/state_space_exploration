@@ -119,7 +119,7 @@ class Workspace(object):
         print('OFFLINE PRETRAINING STARTS')
         start_time = time.time()
         # Training Loop
-        for epoch in tqdm(range(self.cfg.offline_epochs), desc="Training Auto-Encoder: "):
+        for epoch in tqdm(range(self.cfg.offline_epochs), desc="Training Offline Model: "):
             # Pre-Training Update 
             loss = self.agent.offline_update([self.obs, self.actions, self.rewards, self.dones], self.logger, self.num_seed_steps)
             

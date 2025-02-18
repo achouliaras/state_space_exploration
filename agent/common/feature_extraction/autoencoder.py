@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from agent.common.feature_extraction.encoder import Encoder, Decoder
 
@@ -26,6 +27,14 @@ class AutoEncoder(nn.Module):
         self.network.train(training)
         self.decoder.train(training)
 
+    def save_model(self, model_dir, step):
+        torch.save(
+            self.network.state_dict(), '%s/decoder_%s.pt' % (model_dir, step)
+        )
+        torch.save(
+            self.decoder.state_dict(), '%s/decoder_%s.pt' % (model_dir, step)
+        )
+     
     def forward(self, obs, memory = None):
         x, memory = self.network(obs, memory)
         prediction_obs = self.decoder(x)

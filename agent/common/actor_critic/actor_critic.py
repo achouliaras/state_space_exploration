@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from agent.common.actor_critic.critic_only import SimpleCritic
 from agent.common.actor_critic.actor_only import SimpleActor
@@ -81,6 +82,30 @@ class ACModel(nn.Module):
         self.actor.train(training)
         self.critic.train(training)
     
+    def save_model(self, model_dir, step):
+        torch.save(
+            self.network.state_dict(), '%s/network_%s.pt' % (model_dir, step)
+        )
+        torch.save(
+            self.actor.state_dict(), '%s/actor_%s.pt' % (model_dir, step)
+        )
+        torch.save(
+            self.critic.state_dict(), '%s/critic_%s.pt' % (model_dir, step)
+        )
+    
+    def load_actor_critic(self, model_dir, step):
+        self.actor.load_state_dict(
+            torch.load('%s/actor_%s.pt' % (model_dir, step))
+        )
+        self.critic.load_state_dict(
+            torch.load('%s/critic_%s.pt' % (model_dir, step))
+        )
+
+    def load_encoder(self, model_dir, step):
+        self.network.load_state_dict(
+            torch.load('%s/network_%s.pt' % (model_dir, step))
+        )
+
     def forward(self, obs, memory = None):
         if self.action_type == 'Continuous':
             x = obs

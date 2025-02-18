@@ -1,7 +1,7 @@
 # seed=$RANDOM
 # seed=1
 
-test_name=AE_Offline_Freeze #Vanilla #Pret_Offline_Freeze #NoMemory
+test_name=LMDP_Offline_Hinge_transition #Vanilla #Pret_Offline_Freeze #NoMemory
 domain=MiniGrid # highway-env # ALE
 env=Empty-8x8-v0 #Empty-5x5-v0 #BlockedUnlockPickup-v0 # highway-v0 # Breakout-v5
 architecture=CNN-LSTM
@@ -9,7 +9,7 @@ offline_num_seed_steps=5e4
 offline_epochs=100
 import_model=True
 import_protocol=OFFLINE # NORMAL, OFFLINE, ONLINE
-freeze_protocol=ALL # NO, CNN-PART, CNN, ALL
+freeze_protocol=CNN-PART # NO, CNN-PART, CNN, ALL
 
 num_train_steps=100100
 episodes_2_generate=16 
