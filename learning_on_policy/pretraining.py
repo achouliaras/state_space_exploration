@@ -32,7 +32,7 @@ from lib.eval import evaluate_agent
 
 class Workspace(object):
     def __init__(self, cfg, work_dir):
-        print(colored('EXECUTING TRAINING', 'green'))
+        print(colored('EXECUTING ONLINE PRETRAINING', 'green'))
         self.work_dir = work_dir
         
         self.logger = Logger(
@@ -55,15 +55,15 @@ class Workspace(object):
         
         self.agent = agent_setup.create_agent(cfg)
                 
-        # # Load AGENT from offline learning
-        # self.agent, _ = agent_setup.load_agent(self.work_dir, self.cfg, self.agent)
+        # Load AGENT
+        if cfg.import_model:
+            self.agent, _ = agent_setup.load_agent(self.work_dir, self.cfg, self.agent, mode=cfg.import_protocol)
+            if cfg.freeze_protocol != 'NO': self.agent.freeze_models(mode=cfg.freeze_protocol)
         # self.agent.reset_critic()
 
         # If you add parallel envs adjust size
         self.obs = np.zeros((self.num_update_steps, 1) + self.obs_space.shape)
-        print(self.obs.shape)
         self.actions = np.zeros((self.num_update_steps, 1) + self.cfg.action_space)
-        print(self.actions.shape)
         self.logprobs = np.zeros((self.num_update_steps, 1))
         self.rewards = np.zeros((self.num_update_steps, 1))
         self.dones = np.zeros((self.num_update_steps, 1))
@@ -71,7 +71,6 @@ class Workspace(object):
         self.memories = None
         if self.agent.has_memory:
             self.memories = np.zeros((self.num_update_steps, 1) + self.agent.memory_size)
-            print(self.memories.shape)
 
         # for logging
         self.total_feedback = 0
@@ -133,9 +132,9 @@ class Workspace(object):
                 # Action logic
                 with torch.no_grad():
                     if self.agent.has_memory:
-                        obs_tensor = torch.FloatTensor(obs).to(self.device).unsqueeze(0)
-                        memory_tensor = torch.FloatTensor(memory).to(self.device).unsqueeze(0)
-                        mask_tensor = torch.FloatTensor(1-done).to(self.device).unsqueeze(0)
+                        obs_tensor = torch.DoubleTensor(obs).to(self.device).unsqueeze(0)
+                        memory_tensor = torch.DoubleTensor(memory).to(self.device).unsqueeze(0)
+                        mask_tensor = torch.DoubleTensor(1-done).to(self.device).unsqueeze(0)
                         # print(memory_tensor.shape)
                         # print(mask_tensor.shape)
                         action, logprob, _, value, memory = self.agent.get_action(obs=obs_tensor,
@@ -143,14 +142,12 @@ class Workspace(object):
                                                                           memory=memory_tensor * mask_tensor)
                         memory = memory.detach().cpu().numpy()[0]
                     else:
-                        action, logprob, _, value, _ = self.agent.get_action(torch.FloatTensor(obs).to(self.device).unsqueeze(0))
+                        action, logprob, _, value, _ = self.agent.get_action(torch.DoubleTensor(obs).to(self.device).unsqueeze(0))
                 action = action.detach().cpu().numpy()[0]
                 
                 self.actions[step] = action
                 self.logprobs[step] = logprob.detach().cpu().numpy()[0]
                 self.values[step] = value.detach().cpu().numpy()[0]
-
-                # print(f"Iter: {iteration} Step: {step}, action: {action}")
 
                 # execute step and log data
                 next_obs, reward, terminated, truncated, info = self.env.step(action)
@@ -186,7 +183,7 @@ class Workspace(object):
                         episode_success = 0
                     true_episode_reward = 0
                     episode_length = 0
-                    self.step = step
+                    self.step = global_step
                     self.episode += 1
                     obs, _ = self.env.reset()
                     # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
@@ -206,17 +203,7 @@ class Workspace(object):
 
         episode_time = time.time() - start_time
         total_time += episode_time
-        self.logger.log('train/episode', self.episode, global_step)
-        self.logger.log('train/episode_reward', episode_reward, global_step)
-        self.logger.log('train/true_episode_reward', true_episode_reward, global_step)
-        self.logger.log('train/episode_length', episode_length, global_step)
-        self.logger.log('train/duration', episode_time, global_step)
-        self.logger.log('train/total_duration', total_time, global_step)
-        if self.cfg.log_success:
-            self.logger.log('train/episode_success', episode_success, global_step)
-            self.logger.log('train/true_episode_success', episode_success, global_step)
-
-        self.logger.dump(global_step, ty='train')
+        
         self.env.close()
         print('PRE-TRAINING FINISHED')
         self.logger = evaluate_agent(self.agent, self.cfg, self.logger)
@@ -227,7 +214,9 @@ class Workspace(object):
         keys_to_save = ['step', 'episode']
         payload = {k: self.__dict__[k] for k in keys_to_save}
 
-        agent_setup.save_agent(self.agent, payload, self.work_dir, self.cfg, self.global_step)
+        agent_setup.save_agent(self.agent, None, payload, self.work_dir, 
+                               self.cfg, 
+                               self.global_step)
         print('SAVING COMPLETED')
         
 @hydra.main(version_base=None, config_path="../config", config_name='themis_online_pretrain_on_policy')

@@ -7,7 +7,7 @@ import lib.utils as utils
 import hydra
 
 from agent import Agent
-from agent.common.critic import DoubleQCritic
+from agent.common.actor_critic.critic_only import DoubleQCritic
 from stable_baselines3.common.distributions import CategoricalDistribution
 from stable_baselines3.common.utils import get_linear_fn
 

@@ -165,27 +165,3 @@ class Decoder(nn.Module):
         #     # logger.log_param(f'train/lstm', self.memory_module, step)
         #     pass
 
-# Autoencoder Model
-class Autoencoder(nn.Module):
-    def __init__(self, obs_shape, latent_dim, architecture, mode):
-        super().__init__()
-        self.c, *self.obs_size = obs_shape
-
-        if 'CNN' in architecture:
-            self.encoder = utils.cnn(self.obs_size, self.c, latent_dim, mode=mode)
-            self.decoder = utils.de_cnn(self.obs_size, self.c, latent_dim, mode=mode)
-        else:
-            self.encoder = utils.mlp(input_dim=np.array(obs_shape).prod(), 
-                                     output_dim=latent_dim, 
-                                     hidden_depth=1, 
-                                     activation=nn.ReLU)
-            self.decoder = utils.mlp(input_dim=latent_dim, 
-                                     output_dim=np.array(obs_shape).prod(),
-                                     hidden_depth=1, 
-                                     activation=nn.ReLU, 
-                                     output_mod=[nn.Sigmoid(),nn.Unflatten(1, obs_shape)])
-
-    def forward(self, obs):
-        z = self.encoder(obs)
-        x = self.decoder(z)
-        return z, x 

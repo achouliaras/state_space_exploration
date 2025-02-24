@@ -105,7 +105,7 @@ def create_agent(cfg, obs_space=None):
                     mode= cfg.mode, 
                     learnable_temperature = cfg.agent.learnable_temperature,
                     normalize_state_entropy = True)
-        if cfg.deploy_mode == False:
+        if cfg.deploy_mode:
             replay_buffer = ReplayBuffer(
                     obs_space,
                     cfg.agent.obs_shape,
@@ -125,51 +125,60 @@ def create_agent(cfg, obs_space=None):
                     state_type=cfg.state_type, 
                     agent_cfg = cfg.agent,
                     action_cfg = cfg.agent.action_cfg, 
-                    test = cfg.test,
+                    import_protocol = cfg.import_protocol,
+                    deploy_mode = cfg.deploy_mode,
                     mode= cfg.mode,
                     normalize_state_entropy = True)
         return agent
     else:
         raise NotImplementedError   
 
-def save_agent(agent, replay_buffer, payload, work_dir, cfg, global_frame):
-    models_dir = work_dir / cfg.models_dir / 'models'
+def save_agent(agent, replay_buffer, payload, work_dir, cfg, global_frame, mode = 'NORMAL'):
+    if 'OFFLINE' in mode:
+        models_dir = work_dir / cfg.models_dir / 'offline_models'
+        global_frame=cfg.offline_epochs
+        print(f'Saving OFFLINE pretrained model to: {models_dir}')
+    elif 'ONLINE' in mode:
+        models_dir = work_dir / cfg.models_dir / 'online_models'
+        print(f'Saving ONLINE pretrained model to: {models_dir}')
+    else:
+        models_dir = work_dir / cfg.models_dir / 'models'
+    
     os.makedirs(models_dir, exist_ok=True)
-
-    if cfg.test == "OFFLINE": global_frame=cfg.offline_epochs
-
     # Save agent's models & replay buffer
-    agent.save(models_dir, global_frame)
+    agent.save(models_dir, global_frame, mode)
     if replay_buffer != None:
         replay_buffer.save(models_dir, global_frame)
-    
     # Save experiment variables like step and episode
     snapshot = models_dir / f'snapshot_{global_frame}.pt'
     
     torch.save(payload, snapshot, pickle_protocol=4)
 
-def load_agent(work_dir, cfg, agent, replay_buffer=None, mode = None):
-    if mode == "OFFLINE": 
-        models_dir = work_dir / cfg.offline_models_dir / 'models'
+def load_agent(work_dir, cfg, agent, replay_buffer=None, mode = 'NORMAL'):
+    if "OFFLINE" in mode: 
+        models_dir = work_dir / cfg.models_dir / 'offline_models'
         if not models_dir.exists():
             print('NOT EXISTS:', models_dir)
             raise FileNotFoundError()
         print(f'Loading OFFLINE pretrained model from: {models_dir}')
         global_frame=cfg.offline_epochs
-    else:
-        models_dir = work_dir / cfg.models_dir / 'models'
+
+        agent.load(models_dir, global_frame, mode)
+    elif "ONLINE" in mode:
+        models_dir = work_dir / cfg.models_dir / 'online_models'
         if not models_dir.exists():
             print('NOT EXISTS:', models_dir)
             raise FileNotFoundError()
-        print(f'Loading pretrained model from: {models_dir}')
+        print(f'Loading ONLINE pretrained model from: {models_dir}')
         global_frame = cfg.num_seed_steps + cfg.num_unsup_steps
 
         # snapshot = models_dir / f'snapshot_{global_frame}.pt'
         if replay_buffer != None:
             replay_buffer.load(models_dir, global_frame)
 
-    agent.load(models_dir, global_frame, mode)
-
+        agent.load(models_dir, global_frame, mode)
+    else:
+        print('No model parameters were loaded')
     return agent, replay_buffer
 
 class eval_mode(object):

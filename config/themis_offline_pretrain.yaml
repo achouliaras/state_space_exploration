@@ -5,7 +5,7 @@ defaults:
     
 # Experiment level parameters
 experiment_type: State-Vis-Pretraining
-test: OFFLINE
+test: IMDP_Offline_NO_Freeze
 device: cpu
 num_seed_steps: 2e3 # Steps that the agent does random actions to generate data
 offline_epochs: 100
@@ -13,6 +13,9 @@ offline_epochs: 100
 # num_train_steps: 5e6 #1e6 for continuous
 # replay_buffer_capacity: 1e4 #1e6
 deploy_mode: False
+
+import_protocol: OFFLINE
+freeze_protocol: None
 
 # unsup training
 gradient_update: 1
