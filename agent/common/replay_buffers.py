@@ -1,8 +1,138 @@
 import numpy as np
 import torch
-import lib.utils as utils
 from gymnasium.spaces import utils as gym_utils
+import torchrl
+from torchrl.data import LazyTensorStorage
+from torchrl.data.replay_buffers.samplers import RandomSampler
 
+class NovelExperienceMemory(torchrl.data.ReplayBuffer):
+    def __init__(self, capacity=64, k=5, threshold=0.2, device="cuda", encoder=None):
+        super().__init__(
+            storage=LazyTensorStorage(capacity, device=device),
+            sampler=RandomSampler(),
+            batch_size=32
+        )
+        self.capacity = capacity
+        self.k = k
+        self.eps = 0.0001
+        self.threshold = threshold
+        self.device = device
+        self.encoder = encoder
+        
+        # Keep track of states for fast similarity checking
+        self.observations = torch.zeros((capacity, *self.encoder.obs_dim), device=device)
+        self.state_embeddings = torch.zeros((capacity, self.encoder.embedding_size), device=device)
+        self.novelty_scores = torch.zeros(capacity, device=device)
+        self.ptr = 0
+        self.full =False
+    
+    def update_embeddings(self, new_encoder_params):
+        """Refresh all embeddings using the new encoder"""
+        self.encoder.load_state_dict(new_encoder_params)
+
+        if self.ptr == 0:
+            return
+            
+        # Get valid observations
+        valid_obs = self.observations[:self.ptr] if not self.full else self.observations
+        
+        # Re-encode all stored observations
+        new_embeddings = self._encode_states(valid_obs)
+        
+        # Update embeddings in place
+        if not self.full:
+            self.state_embeddings[:self.ptr] = new_embeddings
+        else:
+            self.state_embeddings = new_embeddings
+        
+        # Recalculate novelty scores
+        self._update_novelty_scores()
+
+    def try_add(self, obs):
+        """Add state batch to buffer if novel, with eviction policy"""   
+        batch_size = obs.shape[0]
+
+        # Store original observations
+        obs = obs.detach().to(self.device)
+        
+        # Calculate embeddings
+        state_embeddings = self._encode_states(obs)
+
+        # Calculate novelty score for each state
+        if len(self) > 0:
+            valid_embeddings = self.state_embeddings[:self.ptr] if not self.full else self.state_embeddings
+            similarities = self._knn_similarity(state_embeddings, valid_embeddings)
+        else:
+            similarities = torch.zeros(batch_size, device=self.device)
+
+        # Select novel states. 1 for novel states 0 for not novel enough
+        novel_mask = similarities < self.threshold
+        novel_obs = obs[novel_mask]
+        novel_embeddings = state_embeddings[novel_mask]
+        num_novel = novel_mask.sum().item()
+
+        # Add novel states to buffer
+        if num_novel > 0:
+            remaining_capacity = self.capacity - self.ptr
+            if remaining_capacity >= num_novel:
+                # Add to end of buffer
+                self.observations[self.ptr:self.ptr+num_novel] = novel_obs
+                self.state_embeddings[self.ptr:self.ptr+num_novel] = novel_embeddings
+                self.ptr += num_novel
+            else:
+                # Fill remaining space and evict old entries
+                self.observations[self.ptr:] = novel_obs[:remaining_capacity]
+                self.state_embeddings[self.ptr:] = novel_embeddings[:remaining_capacity]
+
+                # Evict least novel entries for remaining
+                _, evict_indices = torch.topk(self.novelty_scores, k=num_novel - remaining_capacity, largest=False)
+                
+                # Replace evicted entries
+                self.observations[evict_indices] = novel_obs[remaining_capacity:]
+                self.state_embeddings[evict_indices] = novel_embeddings[remaining_capacity:]
+                self.ptr += remaining_capacity
+                self.full = True
+            
+            # Update novelty scores
+            self._update_novelty_scores()
+
+        return (1-similarities)*novel_mask
+
+    def _encode_states(self, obs):
+        """Encode observations using current encoder"""
+        with torch.no_grad():
+            return self.encoder(obs)
+        
+    def _knn_similarity(self, query_embeddings, target_embeddings):
+        """Compute average similarity to k-nearest neighbors"""
+        # Calculate pairwise distances
+        dists = torch.cdist(query_embeddings, target_embeddings, p=2)
+        
+        # Find k-nearest neighbors for each query
+        knn_dists, _ = torch.topk(dists, k=self.k, dim=1, largest=False, sorted=True)
+        
+        # Convert distances to similarities (you can use other similarity measures)
+        similarities = self.eps / (self.eps + knn_dists.mean(dim=1))
+        return similarities         
+
+    def _update_novelty_scores(self):
+        """Update novelty scores for all states in buffer"""
+        if len(self) < 2:
+            return
+            
+        # Compute pairwise similarities
+        valid_embeddings = self.state_embeddings[:self.ptr] if not self.full else self.state_embeddings
+        dists = torch.cdist(valid_embeddings, valid_embeddings, p=2)
+        eye = torch.eye(valid_embeddings.shape[0], device=self.device).bool()
+        dists[eye] = float('inf')  # Ignore self-similarity
+        
+        # Get k-nearest similarities for each state
+        knn_dists, _ = torch.topk(dists, k=self.k, dim=1, largest=False)
+        self.novelty_scores[:len(valid_embeddings)] = self.eps / (self.eps + knn_dists.mean(dim=1))
+
+    def __len__(self):
+        return self.ptr if not self.full else self.capacity
+    
 class ReplayBuffer(object):
     """Buffer to store environment transitions."""
     def __init__(self, obs_space, obs_shape, action_shape, action_type, capacity, device, window=1):

@@ -2,7 +2,7 @@ import torch
 import os
 from agent.sac import SAC
 from agent.ppo import PPO
-from agent.common.replay_buffer import ReplayBuffer
+from agent.common.replay_buffers import ReplayBuffer
 
 def config_agent(cfg):
     # Setup Agent

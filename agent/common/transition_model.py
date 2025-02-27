@@ -17,6 +17,10 @@ class InverseTransitionModel(torch.nn.Module):
         self.encoder = self.create_network()
         self.inverse_model = self.create_actor()
 
+    @property
+    def embedding_size(self):
+        return self.encoder.embedding_size
+    
     def create_network(self):
         # CNN, MLP, LSTM
         encoder = Encoder(obs_shape=self.obs_dim,
@@ -110,6 +114,10 @@ class LatentMDPModel(torch.nn.Module):
         self.transition_model = self.create_actor(input_dim=self.encoder.embedding_size+self.action_embedding_dim,
                                                   output_dim=self.encoder.embedding_size)
 
+    @property
+    def embedding_size(self):
+        return self.encoder.embedding_size
+    
     def create_network(self):
         # CNN, MLP, LSTM
         encoder = Encoder(obs_shape=self.obs_dim,
@@ -172,10 +180,10 @@ class LatentMDPModel(torch.nn.Module):
         self.inverse_model.train(training)
         self.transition_model.train(training)
     
-    def forward(self, obs, action, next_obs, memory = None, next_memory_mask = None):
+    def forward(self, obs, action, next_obs, memory = None, next_memory = None, next_memory_mask = None):
         a_t = self.action_embedding(action)
         z_t, memory = self.encoder(obs, memory)
-        z_t1, next_memory = self.encoder(next_obs, memory*next_memory_mask)
+        z_t1, next_memory = self.encoder(next_obs, memory*next_memory_mask) # memory*next_memory_mask can also work?
         
         i = torch.cat((z_t, z_t1), dim=1)
         t = torch.cat((z_t, a_t), dim=1)

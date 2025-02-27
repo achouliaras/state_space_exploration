@@ -22,6 +22,7 @@ from lib import env_setup
 from lib import agent_setup
 from lib import utils
 from lib.eval import evaluate_agent
+from agent.pretraining.reward_model import IntrinsicRewardModel
 
 
 # Interact with environment for data generation
@@ -51,7 +52,7 @@ class Workspace(object):
         self.num_update_steps = self.cfg.agent.action_cfg.num_update_steps
         self.batch_size =  int(self.num_update_steps) # x num_of_envs
         self.cfg.agent.action_cfg.batch_size = self.batch_size
-        self.num_iterations = int((self.cfg.num_seed_steps + self.cfg.num_unsup_steps+1) // self.batch_size)
+        self.num_iterations = int((self.cfg.num_unsup_steps+1) // self.batch_size)
         
         self.agent = agent_setup.create_agent(cfg)
                 
@@ -60,6 +61,12 @@ class Workspace(object):
             self.agent, _ = agent_setup.load_agent(self.work_dir, self.cfg, self.agent, mode=cfg.import_protocol)
             if cfg.freeze_protocol != 'NO': self.agent.freeze_models(mode=cfg.freeze_protocol)
         # self.agent.reset_critic()
+
+        copy_LMDPmodel = self.agent._create_LatentMDPModel()
+        copy_LMDPmodel.load_state_dict(self.agent.latentMDP.state_dict()) 
+        
+        # pass a copy of the Latent MDP model to the reward model
+        self.reward_model = IntrinsicRewardModel(encoder=copy_LMDPmodel, capacity=self.num_update_steps, batch_size= self.num_update_steps)
 
         # If you add parallel envs adjust size
         self.obs = np.zeros((self.num_update_steps, 1) + self.obs_space.shape)
@@ -137,12 +144,12 @@ class Workspace(object):
                         mask_tensor = torch.DoubleTensor(1-done).to(self.device).unsqueeze(0)
                         # print(memory_tensor.shape)
                         # print(mask_tensor.shape)
-                        action, logprob, _, value, memory = self.agent.get_action(obs=obs_tensor,
+                        action, logprob, _, value, memory = self.agent.get_pretrain_action(obs=obs_tensor,
                                                                           action=None,
                                                                           memory=memory_tensor * mask_tensor)
                         memory = memory.detach().cpu().numpy()[0]
                     else:
-                        action, logprob, _, value, _ = self.agent.get_action(torch.DoubleTensor(obs).to(self.device).unsqueeze(0))
+                        action, logprob, _, value, _ = self.agent.get_pretrain_action(torch.DoubleTensor(obs).to(self.device).unsqueeze(0))
                 action = action.detach().cpu().numpy()[0]
                 
                 self.actions[step] = action
@@ -155,6 +162,7 @@ class Workspace(object):
                 next_memory = None
                 if self.agent.has_memory:
                     next_memory = memory
+
                 self.rewards[step] = reward
 
                 obs = next_obs
@@ -191,12 +199,18 @@ class Workspace(object):
                     if self.agent.has_memory:
                         memory = np.zeros(self.agent.memory_size)
 
+            # Calculate Intrinsic reward
+            self.rewards = self.reward_model.calculate_intrinsic_reward(self.obs, self.actions, self.memories, self.dones)
+
             # Pre-Training Update 
             # if global_step % self.num_update_steps == 0:
             # print('Actions: ',[i[0][0] for i in self.actions])
             # print([i[0] for i in self.rewards])
-            self.agent.pretrain_update([self.obs, self.actions, self.logprobs, self.values, self.rewards, self.dones], 
-                              [next_obs, next_done], self.logger, global_step)
+            self.agent.pretrain_update([self.obs, self.actions, self.logprobs, self.values, self.rewards, self.dones, self.memories], 
+                              [next_obs, next_done, next_memory], self.logger, global_step)
+            
+            new_LMDP_params = self.agent.update_encoder()
+            self.reward_model.update_LMDP_params(new_LMDP_params)
             
             if self.cfg.log_success:
                 episode_success = max(episode_success, terminated)
