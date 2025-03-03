@@ -180,10 +180,10 @@ class LatentMDPModel(torch.nn.Module):
         self.inverse_model.train(training)
         self.transition_model.train(training)
     
-    def forward(self, obs, action, next_obs, memory = None, next_memory = None, next_memory_mask = None):
+    def forward(self, obs, action, next_obs, memory = None, next_memory_mask = None):
         a_t = self.action_embedding(action)
         z_t, memory = self.encoder(obs, memory)
-        z_t1, next_memory = self.encoder(next_obs, memory*next_memory_mask) # memory*next_memory_mask can also work?
+        z_t1, next_memory = self.encoder(next_obs, memory*next_memory_mask) # next_memory can also work?
         
         i = torch.cat((z_t, z_t1), dim=1)
         t = torch.cat((z_t, a_t), dim=1)

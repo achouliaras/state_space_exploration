@@ -15,7 +15,7 @@ class IntrinsicRewardModel:
         self.LMDP_model.load_state_dict(new_LMDP_params)
         self.experience_memory.update_embeddings(self.LMDP_model.encoder.state_dict())
 
-    def calculate_intrinsic_reward(self, obs, actions, memories, dones, next_obs, next_done, next_memory):
+    def calculate_intrinsic_reward(self, obs, actions, memories, dones, next_obs, next_done, next_memory, logger, step):
         obs = torch.DoubleTensor(obs).to(self.device)
         actions = torch.DoubleTensor(actions).to(self.device)
         mask = torch.DoubleTensor([1-dones]).to(self.device)
@@ -34,6 +34,11 @@ class IntrinsicRewardModel:
         global_reward = self.calculate_global_reward(next_obs)
 
         rewards = self.l_coef*local_reward + self.g_coef*global_reward
+
+        logger.log('train/intrinsic_reward', rewards.mean(), step)
+        logger.log('train/local_reward', local_reward.mean(), step)
+        logger.log('train/global_reward', global_reward.mean(), step)
+        
         return torch.DoubleTensor(rewards).to(self.device)
 
     # Maximized by finding key states in the state space that are far away
@@ -73,6 +78,6 @@ class IntrinsicRewardModel:
             loss = loss.detach().cpu().numpy()[0] # Find states the LMDP model can't understand
             abs_loss = torch.abs(loss)
             
-        return abs_loss / (self.eps + loss)
+        return abs_loss / (self.eps + abs_loss)
 
     

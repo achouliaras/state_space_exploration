@@ -21,6 +21,7 @@ freeze_protocol: NO
 # unsup training
 gradient_update: 1
 topK: 5
+latentMDP_update_frequency: 1
 
 # reward learning
 learn_reward: True

@@ -235,6 +235,7 @@ class Logger(object):
             self._train_mg.dump(step, 'train', save)
         else:
             raise f'invalid log type: {ty}'
+        
     def close(self):
         self._eval_mg.close()
         self._train_mg.close()

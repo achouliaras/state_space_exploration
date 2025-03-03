@@ -42,7 +42,7 @@ class Workspace(object):
         self.env.action_space.seed(cfg.seed)
         self.cfg = cfg
         
-        self.num_update_steps = self.cfg.agent.action_cfg.num_update_steps
+        self.num_update_steps = self.cfg.agent.action_cfg.batch_size
         self.batch_size =  int(self.num_update_steps) # x num_of_envs
         self.cfg.agent.action_cfg.batch_size = self.batch_size
         self.num_iterations = int((self.cfg.num_train_steps+1) // self.batch_size)

@@ -22,7 +22,7 @@ from lib import env_setup
 from lib import agent_setup
 from lib import utils
 from lib.eval import evaluate_agent
-from agent.pretraining.reward_model import IntrinsicRewardModel
+from agent.pretraining.reward_models import IntrinsicRewardModel
 
 
 # Interact with environment for data generation
@@ -49,7 +49,7 @@ class Workspace(object):
         self.env.action_space.seed(cfg.seed)
         self.cfg = cfg
         
-        self.num_update_steps = self.cfg.agent.action_cfg.num_update_steps
+        self.num_update_steps = self.cfg.agent.action_cfg.batch_size
         self.batch_size =  int(self.num_update_steps) # x num_of_envs
         self.cfg.agent.action_cfg.batch_size = self.batch_size
         self.num_iterations = int((self.cfg.num_unsup_steps+1) // self.batch_size)
@@ -66,7 +66,7 @@ class Workspace(object):
         copy_LMDPmodel.load_state_dict(self.agent.latentMDP.state_dict()) 
         
         # pass a copy of the Latent MDP model to the reward model
-        self.reward_model = IntrinsicRewardModel(encoder=copy_LMDPmodel, capacity=self.num_update_steps, batch_size= self.num_update_steps)
+        self.reward_model = IntrinsicRewardModel(encoder=copy_LMDPmodel, capacity=self.num_update_steps, batch_size= self.num_update_steps, )
 
         # If you add parallel envs adjust size
         self.obs = np.zeros((self.num_update_steps, 1) + self.obs_space.shape)
@@ -200,7 +200,8 @@ class Workspace(object):
                         memory = np.zeros(self.agent.memory_size)
 
             # Calculate Intrinsic reward
-            self.rewards = self.reward_model.calculate_intrinsic_reward(self.obs, self.actions, self.memories, self.dones)
+            self.rewards = self.reward_model.calculate_intrinsic_reward(self.obs, self.actions, self.memories, self.dones,
+                                                                        next_obs, next_done, next_memory, self.logger, global_step)
 
             # Pre-Training Update 
             # if global_step % self.num_update_steps == 0:
@@ -209,8 +210,14 @@ class Workspace(object):
             self.agent.pretrain_update([self.obs, self.actions, self.logprobs, self.values, self.rewards, self.dones, self.memories], 
                               [next_obs, next_done, next_memory], self.logger, global_step)
             
-            new_LMDP_params = self.agent.update_encoder()
-            self.reward_model.update_LMDP_params(new_LMDP_params)
+            if global_step % self.cfg.latentMDP_update_frequency == 0:
+                new_LMDP_params = self.agent.update_encoder([self.obs, self.actions, self.logprobs, self.values, self.rewards, self.dones, self.memories], 
+                                                            [next_obs, next_done, next_memory], self.logger, global_step)
+            else:
+                # if we add self.agent.pretrain_update here the update will be alternating
+                pass
+
+                self.reward_model.update_LMDP_params(new_LMDP_params)
             
             if self.cfg.log_success:
                 episode_success = max(episode_success, terminated)

@@ -6,8 +6,7 @@ action_range: Null # to be specified on execution
 action_cfg: Null # to be specified on execution
   
 discrete_action:
-  num_update_steps: 64
-  batch_size: Null
+  batch_size: 64 # num_update_steps
   lr: 3e-4
   anneal_lr: True
   discount: 0.99
@@ -24,8 +23,7 @@ discrete_action:
   sequence_length: 4
 
 continuous_action:
-  num_update_steps: 128
-  batch_size: Null
+  batch_size: 128 # num_update_steps
   lr: 3e-4
   anneal_lr: True
   discount: 0.99

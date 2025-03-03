@@ -123,7 +123,7 @@ class Workspace(object):
             # Pre-Training Update 
             loss = self.agent.offline_update([self.obs, self.actions, self.rewards, self.dones], self.logger, self.num_seed_steps)
             
-            if epoch % 10 == 0:
+            if epoch % 5 == 0:
                 print(f"Epoch {epoch}, Loss: {loss:.6f}")
         print(f"Epoch {epoch}, Loss: {loss}")
 

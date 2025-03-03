@@ -7,7 +7,7 @@ max_episode_steps: 100
 
 action_type: Null
 state_type: Null
-latent_dim: 512
+latent_dim: 64
 architecture: 'CNN-LSTM'
 mode: 1
 action_space: Null

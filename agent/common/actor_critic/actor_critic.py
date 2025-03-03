@@ -198,12 +198,12 @@ class ACModel(nn.Module):
             torch.load('%s/critic_%s.pt' % (model_dir, step))
         )
 
-    def forward(self, obs):
+    def forward(self, obs, memory = None):
         x = obs
         logits = self.actor(x)
         state_value = self.critic(x)
 
-        return logits, state_value
+        return logits, state_value, memory
 
     def log(self, logger, step):
         self.actor.log(logger,step)
