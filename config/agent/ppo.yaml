@@ -4,6 +4,7 @@ obs_dim: Null # to be specified on execution
 action_dim: Null # to be specified on execution
 action_range: Null # to be specified on execution
 action_cfg: Null # to be specified on execution
+encoder_update_epochs: 1
   
 discrete_action:
   batch_size: 64 # num_update_steps

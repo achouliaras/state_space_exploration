@@ -6,7 +6,7 @@ from torchrl.data import LazyTensorStorage
 from torchrl.data.replay_buffers.samplers import RandomSampler
 
 class NovelExperienceMemory(torchrl.data.ReplayBuffer):
-    def __init__(self, capacity=64, k=5, threshold=0.2, device="cuda", encoder=None):
+    def __init__(self, capacity=64, k=5, threshold=0.001, device="cuda", encoder=None):
         super().__init__(
             storage=LazyTensorStorage(capacity, device=device),
             sampler=RandomSampler(),
@@ -14,14 +14,15 @@ class NovelExperienceMemory(torchrl.data.ReplayBuffer):
         )
         self.capacity = capacity
         self.k = k
-        self.eps = 0.0001
+        self.eps = 1e-4
         self.threshold = threshold
         self.device = device
         self.encoder = encoder
         
         # Keep track of states for fast similarity checking
-        self.observations = torch.zeros((capacity, *self.encoder.obs_dim), device=device)
-        self.state_embeddings = torch.zeros((capacity, self.encoder.embedding_size), device=device)
+        self.observations = torch.zeros((capacity, *self.encoder.obs_shape), dtype=torch.double, device=device)
+        self.memories = torch.zeros((capacity, self.encoder.memory_size), dtype=torch.double, device=device)
+        self.state_embeddings = torch.zeros((capacity, self.encoder.embedding_size), dtype=torch.double ,device=device)
         self.novelty_scores = torch.zeros(capacity, device=device)
         self.ptr = 0
         self.full =False
@@ -33,30 +34,32 @@ class NovelExperienceMemory(torchrl.data.ReplayBuffer):
         if self.ptr == 0:
             return
             
-        # Get valid observations
+        # Get valid observations and Memories
         valid_obs = self.observations[:self.ptr] if not self.full else self.observations
+        valid_memories = self.memories[:self.ptr] if not self.full else self.memories
         
         # Re-encode all stored observations
-        new_embeddings = self._encode_states(valid_obs)
+        new_embeddings, new_memories= self._encode_states(valid_obs, valid_memories)
         
         # Update embeddings in place
         if not self.full:
             self.state_embeddings[:self.ptr] = new_embeddings
+            self.memories[:self.ptr] = new_memories
         else:
             self.state_embeddings = new_embeddings
+            self.memories = new_memories
         
         # Recalculate novelty scores
         self._update_novelty_scores()
 
-    def try_add(self, obs):
-        """Add state batch to buffer if novel, with eviction policy"""   
+    def estimate_novelty_score(self, obs, memory):
         batch_size = obs.shape[0]
 
-        # Store original observations
         obs = obs.detach().to(self.device)
-        
+        memory = memory.detach().to(self.device)
+
         # Calculate embeddings
-        state_embeddings = self._encode_states(obs)
+        state_embeddings, _ = self._encode_states(obs, memory)
 
         # Calculate novelty score for each state
         if len(self) > 0:
@@ -67,21 +70,35 @@ class NovelExperienceMemory(torchrl.data.ReplayBuffer):
 
         # Select novel states. 1 for novel states 0 for not novel enough
         novel_mask = similarities < self.threshold
+
+        return (1-similarities)*novel_mask, similarities, novel_mask
+
+    def try_add(self, obs, memory):
+        """Add state batch to buffer if novel, with eviction policy"""
+        reward, similarities, novel_mask = self.estimate_novelty_score(obs, memory)
+        
+        # Calculate embeddings
+        state_embeddings, _ = self._encode_states(obs, memory)
+
         novel_obs = obs[novel_mask]
+        novel_mem = memory[novel_mask]
         novel_embeddings = state_embeddings[novel_mask]
         num_novel = novel_mask.sum().item()
-
+        
+        # print("Added: ",num_novel)
         # Add novel states to buffer
         if num_novel > 0:
             remaining_capacity = self.capacity - self.ptr
             if remaining_capacity >= num_novel:
                 # Add to end of buffer
-                self.observations[self.ptr:self.ptr+num_novel] = novel_obs
-                self.state_embeddings[self.ptr:self.ptr+num_novel] = novel_embeddings
+                self.observations[self.ptr:(self.ptr+num_novel)] = novel_obs
+                self.memories[self.ptr:(self.ptr+num_novel)] = novel_mem
+                self.state_embeddings[self.ptr:(self.ptr+num_novel)] = novel_embeddings
                 self.ptr += num_novel
             else:
                 # Fill remaining space and evict old entries
                 self.observations[self.ptr:] = novel_obs[:remaining_capacity]
+                self.memories[self.ptr:] = novel_mem[:remaining_capacity]
                 self.state_embeddings[self.ptr:] = novel_embeddings[:remaining_capacity]
 
                 # Evict least novel entries for remaining
@@ -89,6 +106,7 @@ class NovelExperienceMemory(torchrl.data.ReplayBuffer):
                 
                 # Replace evicted entries
                 self.observations[evict_indices] = novel_obs[remaining_capacity:]
+                self.memories[evict_indices] = novel_mem[remaining_capacity:]
                 self.state_embeddings[evict_indices] = novel_embeddings[remaining_capacity:]
                 self.ptr += remaining_capacity
                 self.full = True
@@ -96,12 +114,13 @@ class NovelExperienceMemory(torchrl.data.ReplayBuffer):
             # Update novelty scores
             self._update_novelty_scores()
 
-        return (1-similarities)*novel_mask
+        return reward
 
-    def _encode_states(self, obs):
+    def _encode_states(self, obs, memory):
         """Encode observations using current encoder"""
         with torch.no_grad():
-            return self.encoder(obs)
+            z_t, memory = self.encoder(obs, memory)
+            return z_t, memory
         
     def _knn_similarity(self, query_embeddings, target_embeddings):
         """Compute average similarity to k-nearest neighbors"""
@@ -113,7 +132,7 @@ class NovelExperienceMemory(torchrl.data.ReplayBuffer):
         
         # Convert distances to similarities (you can use other similarity measures)
         similarities = self.eps / (self.eps + knn_dists.mean(dim=1))
-        return similarities         
+        return similarities    
 
     def _update_novelty_scores(self):
         """Update novelty scores for all states in buffer"""
@@ -128,7 +147,8 @@ class NovelExperienceMemory(torchrl.data.ReplayBuffer):
         
         # Get k-nearest similarities for each state
         knn_dists, _ = torch.topk(dists, k=self.k, dim=1, largest=False)
-        self.novelty_scores[:len(valid_embeddings)] = self.eps / (self.eps + knn_dists.mean(dim=1))
+        mean_kdist = knn_dists.mean(dim=1)
+        self.novelty_scores[:len(valid_embeddings)] = mean_kdist / (self.eps + mean_kdist)
 
     def __len__(self):
         return self.ptr if not self.full else self.capacity

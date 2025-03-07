@@ -8,20 +8,22 @@ experiment_type: State-Vis-Pretraining
 test: PEBBLE
 device: cpu
 offline_epochs: 100
-num_seed_steps: 5e2 # Steps that the agent does random actions to fill the buffers 5e3 for continuous
-num_unsup_steps: 500 #5000
+num_seed_steps: 5e4 # Steps that the agent does random actions to fill the buffers 5e3 for continuous
+num_unsup_steps: 5e4 #5000
 num_train_steps: 5e6 #1e6 for continuous
 replay_buffer_capacity: 1e4 #1e6
 deploy_mode: False
 
 import_model: True
 import_protocol: NORMAL
+export_protocol: ONLINE
 freeze_protocol: NO
 
 # unsup training
 gradient_update: 1
 topK: 5
 latentMDP_update_frequency: 1
+encoder_update_epochs: 1
 
 # reward learning
 learn_reward: True

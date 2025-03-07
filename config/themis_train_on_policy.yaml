@@ -16,6 +16,7 @@ deploy_mode: True
 
 import_model: True
 import_protocol: NORMAL
+export_protocol: NORMAL
 freeze_protocol: NO
 
 # unsup training

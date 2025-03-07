@@ -13,6 +13,9 @@ COMMON_TRAIN_FORMAT = [
     ('episode', 'Eps', 'int'),
     ('step', 'Step', 'int'),
     ('episode_reward', 'R', 'float'),
+    ('intrinsic_reward', 'Ri', 'float'),
+    ('local_reward', 'Rl', 'float'),
+    ('global_reward', 'Rg', 'float'),
     ('true_episode_reward', 'TR', 'float'),
     ('episode_length', 'EL', 'int'), 
     #('total_feedback', 'TF', 'int'),
@@ -20,6 +23,8 @@ COMMON_TRAIN_FORMAT = [
     #('noisy_feedback', 'NR', 'int'),
     ('duration', 'D', 'time'),
     ('total_duration', 'TD', 'fulltime'),
+    ('encoder_loss', 'ELOSS', 'float'),
+    ('encoder_learning_rate', 'ELR', 'float'),
 ]
 
 COMMON_EVAL_FORMAT = [

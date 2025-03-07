@@ -145,7 +145,7 @@ class Workspace(object):
         agent_setup.save_agent(self.agent, None, payload, self.work_dir, 
                                self.cfg, 
                                self.cfg.offline_epochs,
-                               mode=self.cfg.import_protocol)
+                               mode=self.cfg.export_protocol)
         print('SAVING COMPLETED')
         
 @hydra.main(version_base=None, config_path="../config", config_name='themis_offline_pretrain')

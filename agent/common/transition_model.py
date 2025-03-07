@@ -3,6 +3,7 @@ from torch import nn
 from agent.common.actor_critic.critic_only import SimpleCritic
 from agent.common.actor_critic.actor_only import SimpleActor
 from agent.common.feature_extraction.encoder import Encoder
+from geomloss import SamplesLoss
 
 class InverseTransitionModel(torch.nn.Module):
     def __init__(self, obs_dim, action_dim, action_type, latent_dim, architecture, mode):
@@ -114,6 +115,13 @@ class LatentMDPModel(torch.nn.Module):
         self.transition_model = self.create_actor(input_dim=self.encoder.embedding_size+self.action_embedding_dim,
                                                   output_dim=self.encoder.embedding_size)
 
+        self.mse_loss = nn.MSELoss()
+        self.cross_entropy_loss = nn.CrossEntropyLoss()
+        self.eval_cross_entropy = nn.CrossEntropyLoss(reduction='none')
+        self.wasserstein_loss = SamplesLoss(loss='sinkhorn', p=2, blur=0.05)
+        self.hinge_loss = nn.HingeEmbeddingLoss()
+        self.l1_loss = nn.L1Loss()
+
     @property
     def embedding_size(self):
         return self.encoder.embedding_size
@@ -181,9 +189,9 @@ class LatentMDPModel(torch.nn.Module):
         self.transition_model.train(training)
     
     def forward(self, obs, action, next_obs, memory = None, next_memory_mask = None):
-        a_t = self.action_embedding(action)
+        a_t = self.action_embedding(action).squeeze(1)
         z_t, memory = self.encoder(obs, memory)
-        z_t1, next_memory = self.encoder(next_obs, memory*next_memory_mask) # next_memory can also work?
+        z_t1, next_memory = self.encoder(next_obs, memory*next_memory_mask)
         
         i = torch.cat((z_t, z_t1), dim=1)
         t = torch.cat((z_t, a_t), dim=1)
@@ -196,3 +204,4 @@ class LatentMDPModel(torch.nn.Module):
     def log(self, logger, step):
         self.encoder.log(logger,step)
         self.inverse_model.log(logger,step)
+        self.transition_model.log(logger,step)

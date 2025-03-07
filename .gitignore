@@ -168,6 +168,7 @@ cython_debug/
 *.egg-info
 *.lprof
 *.prof
+*.png
 
 .pytest_cache
 .cache
@@ -213,5 +214,3 @@ htmlcov
 junk
 src
 figures
-
-upload_code.sh

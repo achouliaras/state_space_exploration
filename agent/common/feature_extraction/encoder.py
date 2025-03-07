@@ -27,6 +27,10 @@ class Encoder(nn.Module):
         self.outputs = dict()
 
     @property
+    def obs_shape(self):
+        return (self.c, *self.obs_size)
+    
+    @property
     def memory_size(self):
         return 2*self.semi_memory_size
 
@@ -38,7 +42,7 @@ class Encoder(nn.Module):
     def embedding_size(self):
         return self.semi_memory_size
     
-    def forward(self, obs, memory):
+    def forward(self, obs, memory=None):
         x = obs.permute(0, 1, 2, 3)
         
         # print(f'input: {x[0]}')

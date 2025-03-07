@@ -9,12 +9,11 @@ from agent.pretraining import pebble
 from agent.common.feature_extraction.autoencoder import AutoEncoder
 from agent.common.transition_model import LatentMDPModel
 from agent.common.actor_critic.actor_critic import ACModel, ACNModel
-from geomloss import SamplesLoss
 
 class PPO(Agent):
     """PPO algorithm."""
     def __init__(self, obs_dim, action_type, device, latent_dim, architecture, state_type,
-                 agent_cfg, action_cfg, import_protocol, deploy_mode, mode=1, normalize_state_entropy=True):
+                 agent_cfg, cfg, import_protocol, deploy_mode, mode=1, normalize_state_entropy=True):
         super().__init__()
         self.obs_dim = obs_dim
         self.action_type = action_type
@@ -30,20 +29,20 @@ class PPO(Agent):
         self.action_scale = (agent_cfg.action_range[1] - agent_cfg.action_range[0]) /2.0
         self.action_bias = (agent_cfg.action_range[1] + agent_cfg.action_range[0]) /2.0
         
-        self.num_update_steps = action_cfg.batch_size
-        self.lr = action_cfg.lr
-        self.anneal_lr = action_cfg.anneal_lr
-        self.discount = action_cfg.discount
-        self.gae_lambda = action_cfg.gae_lambda
-        self.num_minibatches = action_cfg.num_minibatches
-        self.update_epochs = action_cfg.update_epochs
-        self.clip_coef = action_cfg.clip_coef
-        self.norm_adv = action_cfg.norm_adv
-        self.clip_vloss = action_cfg.clip_vloss
-        self.ent_coef = action_cfg.ent_coef
-        self.vf_coef = action_cfg.vf_coef
-        self.max_grad_norm = action_cfg.max_grad_norm
-        self.target_kl = None if action_cfg.target_kl == 'None' else action_cfg.target_kl
+        self.num_update_steps = cfg.agent.action_cfg.batch_size
+        self.lr = cfg.agent.action_cfg.lr
+        self.anneal_lr = cfg.agent.action_cfg.anneal_lr
+        self.discount = cfg.agent.action_cfg.discount
+        self.gae_lambda = cfg.agent.action_cfg.gae_lambda
+        self.num_minibatches = cfg.agent.action_cfg.num_minibatches
+        self.update_epochs = cfg.agent.action_cfg.update_epochs
+        self.clip_coef = cfg.agent.action_cfg.clip_coef
+        self.norm_adv = cfg.agent.action_cfg.norm_adv
+        self.clip_vloss = cfg.agent.action_cfg.clip_vloss
+        self.ent_coef = cfg.agent.action_cfg.ent_coef
+        self.vf_coef = cfg.agent.action_cfg.vf_coef
+        self.max_grad_norm = cfg.agent.action_cfg.max_grad_norm
+        self.target_kl = None if cfg.agent.action_cfg.target_kl == 'None' else cfg.agent.action_cfg.target_kl
         
         self.s_ent_stats = pebble.TorchRunningMeanStd(shape=[1], device=self.device)
         self.normalize_state_entropy = normalize_state_entropy
@@ -52,7 +51,7 @@ class PPO(Agent):
         self.sequence_length = 1
         if 'LSTM' in architecture: 
             self.has_memory = True
-            self.sequence_length = action_cfg.sequence_length # CHECK
+            self.sequence_length = cfg.agent.action_cfg.sequence_length # CHECK
 
         self.minibatch_size =  int(self.num_update_steps // self.num_minibatches)
         # self.batch_size_of_sequences = int(self.minibatch_size // self.sequence_length)
@@ -65,17 +64,12 @@ class PPO(Agent):
             # self.autoencoder = self._create_AutoEncoder()
             # self.autoencoder_optimizer = torch.optim.Adam(self.autoencoder.parameters(), lr=self.lr) # CHECK     
             # self.autoencoder_loss_fn = nn.MSELoss()
+            self.encoder_update_epochs = cfg.encoder_update_epochs
 
             # pre-training
             self.latentMDP = self._create_LatentMDPModel()
             self.latentMDP_optimizer = torch.optim.Adam(self.latentMDP.parameters(), lr=self.lr) # CHECK
             
-            self.mse_loss = nn.MSELoss()
-            self.cross_entropy_loss = nn.CrossEntropyLoss()
-            self.wasserstein_loss = SamplesLoss(loss='sinkhorn', p=2, blur=0.05)
-            self.hinge_loss = nn.HingeEmbeddingLoss()
-            self.l1_loss = nn.L1Loss()
-
             # online pretraining
             # AC model for policy learning
             self.acmodel = self._create_ACModel()
@@ -162,7 +156,7 @@ class PPO(Agent):
                     z_t, _ = self.latentMDP.encoder.forward(obs)
 
             if self.action_type == 'Continuous':
-                (mean, log_std), state_value, memory = self.acmodel.forward(z_t)
+                (mean, log_std), state_value, _ = self.acmodel.forward(z_t)
                 std = torch.exp(log_std)
                 dist = torch.distributions.Normal(mean, std)
                 if action == None:
@@ -170,7 +164,7 @@ class PPO(Agent):
                 return action, dist.log_prob(action).sum(1), dist.entropy().sum(1), state_value, memory
             
             elif self.action_type == 'Discrete':
-                logits, state_value = self.acmodel.forward(z_t)
+                logits, state_value, _ = self.acmodel.forward(z_t)
                 # Action is a flat integer
                 dist = Categorical(logits=logits)
                 if action == None:
@@ -199,6 +193,9 @@ class PPO(Agent):
         if "OFFLINE" in mode:
             # self.autoencoder.save_model(model_dir, step)
             self.latentMDP.save_model(model_dir, step)
+        if "ONLINE" in mode:
+            self.latentMDP.save_model(model_dir, step)
+            self.acmodel.save_model(model_dir, step)
         else:
             self.acmodel.save_model(model_dir, step)
             
@@ -214,8 +211,8 @@ class PPO(Agent):
             for name, p in self.acmodel.network.cnn.named_parameters():
                 p.requires_grad = False
                 if 'PART' in mode and '7' in name:
-                    print('Freeze ', name, p.requires_grad)
                     p.requires_grad = True
+                    print('Freeze ', name, p.requires_grad)
         # Freeze the entire encoder (cnn/mlp + lstm)
         elif 'ALL' in mode:
             for name, p in self.acmodel.network.named_parameters():
@@ -253,7 +250,7 @@ class PPO(Agent):
                 action_t = torch.LongTensor(action_t.reshape((self.sequence_length+1, batch_size,1))).to(self.device)
             not_done_t = torch.DoubleTensor(not_done_t.reshape((self.sequence_length+1, batch_size, 1))).to(self.device)
             memories = torch.zeros((self.sequence_length+1, batch_size, self.memory_size[0]),dtype=torch.float64).to(self.device)
-            
+
             batch_loss = 0
             for i in range(0, self.sequence_length):
                 obs_tensor = obs_t[i]
@@ -277,19 +274,19 @@ class PPO(Agent):
                     memories[i + 2] = next_memory.detach() # for MDP modelling
 
                 # Best so far.
-                action_loss = self.cross_entropy_loss(pred_action_logprobs, action_tensor)
+                action_loss = self.latentMDP.cross_entropy_loss(pred_action_logprobs, action_tensor)
 
                 # z_a = z_t1[:batch_size//2]
                 # z_b = z_t1[batch_size//2:]
                 
-                # contrastive_loss = self.hinge_loss(z_a, z_b) # not any effect, at least no harm
-                # contrastive_loss = -1 * self.wasserstein_loss(z_a, z_b) # Bad result
+                # contrastive_loss = self.latentMDP.hinge_loss(z_a, z_b) # not any effect, at least no harm
+                # contrastive_loss = -1 * self.latentMDP.wasserstein_loss(z_a, z_b) # Bad result
 
-                # transition_loss = self.mse_loss(z_hat_t1, z_t1) # Decent alone, not good with action loss
-                # transition_loss = self.wasserstein_loss(z_hat_t1, z_t1) # Not good enough
+                # transition_loss = self.latentMDP.mse_loss(z_hat_t1, z_t1) # Decent alone, not good with action loss
+                # transition_loss = self.latentMDP.wasserstein_loss(z_hat_t1, z_t1) # Not good enough
 
-                # locality_loss = self.l1_loss(z_t, z_t1) # Big performance drop
-                # locality_loss = self.wasserstein_loss(z_t, z_t1) # Performance drop
+                # locality_loss = self.latentMDP.l1_loss(z_t, z_t1) # Big performance drop
+                # locality_loss = self.latentMDP.wasserstein_loss(z_t, z_t1) # Performance drop
 
                 # Bisimilarity loss
                 loss = 1.0 * action_loss
@@ -319,18 +316,18 @@ class PPO(Agent):
         obs, actions, _, _, rewards, dones, memories, next_obs, next_done, next_memory = self.to_tensor(trajectory, next)
 
         # extend obs, dones, memories with next_obs, next_done, next_memory
-        obs = torch.cat((obs,next_obs), dim=0)
+        obs = torch.cat((obs,next_obs.unsqueeze(0)), dim=0)
         dones = torch.cat((dones,next_done), dim=0)
-        memories = torch.cat((memories,next_memory), dim=0)
-       
+        memories = torch.cat((memories,next_memory.unsqueeze(0)), dim=0)
+        
         batch_size = self.num_update_steps
-        sequence_ids = list(range(0, batch_size-self.sequence_length-1,self.sequence_length))
-        no_minibatches = int(len(sequence_ids) // self.minibatch_size)
+        sequence_ids = list(range(0, batch_size-self.sequence_length-1))
+        no_minibatches = max(int(len(sequence_ids) // self.minibatch_size),1)
 
-        for epoch in range(self.update_epochs):
+        for epoch in range(self.encoder_update_epochs):
             # print('Epoch ', epoch)
             print_flag = False
-            if epoch == self.update_epochs -1:
+            if epoch == self.encoder_update_epochs -1:
                 logger.log('train/batch_reward', rewards.mean(), step)
                 print_flag = True
             for _ in range(no_minibatches):
@@ -340,16 +337,13 @@ class PPO(Agent):
                 # Reshape data by sequence size first, batch size second
                 batch_ids = np.repeat(sample_ids, self.sequence_length+1) + np.tile(np.arange(self.sequence_length+1), len(sample_ids))
 
-                print(obs.shape)
                 obs_t = obs[batch_ids]
-                print(obs_t.shape)
-
                 actions_t = actions[batch_ids]
                 dones_t = dones[batch_ids]
                 memories_t = memories[batch_ids]
 
                 # Flatten and reshape the data
-                b_obs, b_actions, _, _, b_dones, b_memories, _, _ = self.flatten_batch(obs_t, actions_t, None, None, dones_t, memories_t)
+                b_obs, b_actions, _, _, b_dones, b_memories, _, _ = self.reshape_batch(obs_t, actions_t, None, None, dones_t, memories_t)
 
                 batch_loss = 0
                 for i in range(0, self.sequence_length):
@@ -365,30 +359,30 @@ class PPO(Agent):
 
                         # prediction_obs, _, memory  = self.autoencoder(obs_tensor, memory_tensor * mask_tensor)
                         pred_action_logprobs, z_hat_t1, memory, next_memory, z_t, z_t1  = self.latentMDP(obs_tensor, action_tensor, next_obs_tensor, 
-                                                                                memory_tensor * mask_tensor, next_memory_tensor * next_mask_tensor)
+                                                                                memory_tensor * mask_tensor, next_mask_tensor)
                     else:
                         # prediction_obs, _, memory,  = self.autoencoder(obs_tensor)
                         pred_action_logprobs, z_hat_t1, _, _, z_t, z_t1  = self.latentMDP(obs_tensor, action_tensor, next_obs_tensor)
 
                     if self.has_memory and i < self.sequence_length-1:
-                        memories[i + 1] = memory.detach()
-                        memories[i + 2] = next_memory.detach() # for MDP modelling
+                        b_memories[i + 1] = memory.detach()
+                        b_memories[i + 2] = next_memory.detach() # for MDP modelling
 
                     # Best so far.
-                    action_loss = self.cross_entropy_loss(pred_action_logprobs, action_tensor)
+                    action_loss = self.latentMDP.cross_entropy_loss(pred_action_logprobs, action_tensor)
 
                     {
                     # z_a = z_t1[:num_update_steps//2]
                     # z_b = z_t1[num_update_steps//2:]
                     
-                    # contrastive_loss = self.hinge_loss(z_a, z_b) # not any effect, at least no harm
-                    # contrastive_loss = -1 * self.wasserstein_loss(z_a, z_b) # Bad result
+                    # contrastive_loss = self.latentMDP.hinge_loss(z_a, z_b) # not any effect, at least no harm
+                    # contrastive_loss = -1 * self.latentMDP.wasserstein_loss(z_a, z_b) # Bad result
 
-                    # transition_loss = self.mse_loss(z_hat_t1, z_t1) # Decent alone, not good with action loss
-                    # transition_loss = self.wasserstein_loss(z_hat_t1, z_t1) # Not good enough
+                    # transition_loss = self.latentMDP.mse_loss(z_hat_t1, z_t1) # Decent alone, not good with action loss
+                    # transition_loss = self.latentMDP.wasserstein_loss(z_hat_t1, z_t1) # Not good enough
 
-                    # locality_loss = self.l1_loss(z_t, z_t1) # Big performance drop
-                    # locality_loss = self.wasserstein_loss(z_t, z_t1) # Performance drop
+                    # locality_loss = self.latentMDP.l1_loss(z_t, z_t1) # Big performance drop
+                    # locality_loss = self.latentMDP.wasserstein_loss(z_t, z_t1) # Performance drop
                     }
                     # Bisimilarity loss
                     loss = 1.0 * action_loss
@@ -408,11 +402,11 @@ class PPO(Agent):
 
                 # Use action to take the suitable Q value
                 if print_flag:
-                    logger.log('train_latentMDP/loss', batch_loss, step)
+                    logger.log('train_encoder/loss', batch_loss, step)
 
                 self.latentMDP.log(logger, step)
                 
-        logger.log('train_latentMDP/learning_rate', self.optimizer.param_groups[0]["lr"], step)
+        logger.log('train_encoder/learning_rate', self.optimizer.param_groups[0]["lr"], step)
         return self.latentMDP.state_dict()
     
     # An Intrinsic Reward is fed to the PPO update
@@ -425,16 +419,16 @@ class PPO(Agent):
         with torch.no_grad():
             if self.has_memory:
                 next_mask = 1-next_done
-                z_next = self.latentMDP.encoder.forward(next_obs, next_memory*next_mask)
+                z_next, _ = self.latentMDP.encoder.forward(next_obs, next_memory*next_mask)
             else:
-                z_next = self.latentMDP.encoder.forward(next_obs)
+                z_next, _ = self.latentMDP.encoder.forward(next_obs)
 
         # Calculate Advantages and Expected Returns        
         advantages, returns = self.calculate_advantage_and_returns(values, dones, rewards, z_next, next_memory, next_done, next_mask)
 
         batch_size = self.num_update_steps
-        sequence_ids = list(range(0, batch_size-self.sequence_length-1,self.sequence_length))
-        no_minibatches = int(len(sequence_ids) // self.minibatch_size)
+        sequence_ids = list(range(0, batch_size-self.sequence_length-1))
+        no_minibatches = max(int(len(sequence_ids) // self.minibatch_size), 1)
 
         self.clipfracs = []
         for epoch in range(self.update_epochs):
@@ -444,16 +438,14 @@ class PPO(Agent):
                 logger.log('train/batch_reward', rewards.mean(), step)
                 print_flag = True
             
-            for _ in no_minibatches:
+            for _ in range(no_minibatches):
                 # Suffle sequence ids
                 sample_ids = np.random.choice(sequence_ids, self.minibatch_size, replace=False)
                 
                 # Reshape data by sequence size first, batch size second
                 batch_ids = np.repeat(sample_ids, self.sequence_length+1) + np.tile(np.arange(self.sequence_length+1), len(sample_ids))
 
-                print(obs.shape)
                 obs_t = obs[batch_ids]
-                print(obs_t.shape)
                 actions_t = actions[batch_ids]
                 logprobs_t = logprobs[batch_ids]
                 values_t = values[batch_ids]
@@ -461,11 +453,28 @@ class PPO(Agent):
                 memories_t = memories[batch_ids]
                 advantages_t = advantages[batch_ids]
                 returns_t = returns[batch_ids]
-
+                
                 # Flatten and reshape the data
-                b_obs, b_actions, b_logprobs, b_values, b_dones, b_memories, b_advantages, b_returns = self.flatten_batch(obs_t, actions_t, 
+                b_obs, b_actions, b_logprobs, b_values, b_dones, b_memories, b_advantages, b_returns = self.reshape_batch(obs_t, actions_t, 
                                                                         logprobs_t, values_t, dones_t, memories_t, advantages_t, returns_t)
- 
+
+                # print(obs_t.shape)
+                # print(b_obs.shape)
+                # print(actions_t.shape)
+                # print(b_actions.shape)
+                # print(logprobs_t.shape)
+                # print(b_logprobs.shape)
+                # print(values_t.shape)
+                # print(b_values.shape)
+                # print(dones_t.shape)
+                # print(b_dones.shape)
+                # print(memories_t.shape)
+                # print(b_memories.shape)
+                # print(advantages_t.shape)
+                # print(b_advantages.shape)
+                # print(returns_t.shape)
+                # print(b_returns.shape)
+                
                 batch_entropy = 0
                 batch_value = 0
                 batch_actor_loss = 0
@@ -473,14 +482,14 @@ class PPO(Agent):
                 batch_loss = 0
 
                 for i in range(0, self.sequence_length):
-                    obs_tensor = b_obs[i].unsqueeze(0)
+                    obs_tensor = b_obs[i]
                     if self.has_memory:
-                        memory_tensor = b_memories[i].unsqueeze(0)
-                        mask_tensor = (1-b_dones[i]).to(self.device).unsqueeze(0)
-
-                        _, newlogprob, entropy, newvalue, memory = self.get_pretrain_action(obs_tensor, b_actions.long()[i], memory_tensor * mask_tensor)
+                        memory_tensor = b_memories[i]
+                        mask_tensor = (1-b_dones[i]).to(self.device)
+                        
+                        _, newlogprob, entropy, newvalue, memory = self.get_pretrain_action(obs_tensor, b_actions[i], memory_tensor * mask_tensor)
                     else:
-                        _, newlogprob, entropy, newvalue, _ = self.get_pretrain_action(obs_tensor, b_actions.long()[i])
+                        _, newlogprob, entropy, newvalue, _ = self.get_pretrain_action(obs_tensor, b_actions[i])
                     logratio = newlogprob - b_logprobs[i]
                     ratio = logratio.exp()
 
@@ -489,8 +498,8 @@ class PPO(Agent):
                         old_approx_kl = (-logratio).mean()
                         approx_kl = ((ratio - 1) - logratio).mean()
                         self.clipfracs += [((ratio - 1.0).abs() > self.clip_coef).float().mean().item()]
-
-                    actor_loss, critic_loss = self.policy_and_value_update(b_advantages[i], b_values[i], b_returns[i], ratio)
+                    
+                    actor_loss, critic_loss = self.policy_and_value_update(b_advantages[i], b_values[i], b_returns[i], ratio, newvalue)
 
                     entropy_loss = entropy.mean()
                     loss = actor_loss - self.ent_coef * entropy_loss + critic_loss * self.vf_coef
@@ -745,7 +754,7 @@ class PPO(Agent):
             returns = advantages + values
         return advantages, returns
     
-    def policy_and_value_update(self, b_advantages, b_values, b_returns, ratio):
+    def policy_and_value_update(self, b_advantages, b_values, b_returns, ratio, newvalue):
         mb_advantages = b_advantages
         if self.norm_adv: # Use on vector envs
             mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
@@ -756,7 +765,7 @@ class PPO(Agent):
         pg_loss = torch.max(pg_loss1, pg_loss2).mean()
 
         # Value loss
-        newvalue = newvalue.view(-1)
+        # newvalue = newvalue.view(-1) $ Not needed when processing batches
         if self.clip_vloss:
             v_loss_unclipped = (newvalue - b_returns) ** 2
             v_clipped = b_values + torch.clamp(newvalue - b_values, -self.clip_coef, self.clip_coef)
@@ -773,7 +782,10 @@ class PPO(Agent):
         next_obs, next_done, next_memory = next 
 
         obs = torch.DoubleTensor(obs).to(self.device)
-        actions = torch.DoubleTensor(actions).to(self.device)
+        if self.action_type == 'Continuous':
+            actions = torch.DoubleTensor(actions).to(self.device)
+        elif self.action_type == 'Discrete':
+            actions = torch.LongTensor(actions).to(self.device)
         logprobs = torch.DoubleTensor(logprobs).to(self.device)
         values = torch.DoubleTensor(values).to(self.device)
         rewards = torch.DoubleTensor(rewards).to(self.device)
@@ -802,5 +814,21 @@ class PPO(Agent):
         b_dones = dones.reshape(-1)
         b_values = values.reshape(-1)
         b_memories = memories.reshape((-1,) + tuple(self.memory_size))  if memories !=None else None
+        
+        return b_obs, b_actions, b_logprobs, b_values, b_dones, b_memories, b_advantages, b_returns
+    
+    def reshape_batch(self, obs, actions, logprobs, values, dones, memories=None, advantages=None, returns=None):
+        # reshape the batch with sequence length first
+        b_obs = obs.reshape((self.sequence_length+1, self.minibatch_size) + tuple(self.obs_dim))
+        b_logprobs = logprobs.reshape((self.sequence_length+1, self.minibatch_size, -1)) if logprobs !=None else None
+        if self.action_type == 'Continuous':
+            b_actions = actions.reshape((self.sequence_length+1, self.minibatch_size) + tuple(self.action_dim))
+        elif self.action_type == 'Discrete':
+            b_actions = actions.reshape((self.sequence_length+1, self.minibatch_size,1))
+        b_advantages = advantages.reshape((self.sequence_length+1, self.minibatch_size, -1)) if advantages !=None else None
+        b_returns = returns.reshape((self.sequence_length+1, self.minibatch_size, -1)) if returns !=None else None
+        b_dones = dones.reshape((self.sequence_length+1, self.minibatch_size, -1))
+        b_values = values.reshape((self.sequence_length+1, self.minibatch_size, -1)) if values !=None else None
+        b_memories = memories.reshape((self.sequence_length+1, self.minibatch_size, self.memory_size[0]))  if memories !=None else None
         
         return b_obs, b_actions, b_logprobs, b_values, b_dones, b_memories, b_advantages, b_returns
