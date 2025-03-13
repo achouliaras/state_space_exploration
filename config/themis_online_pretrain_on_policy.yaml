@@ -20,7 +20,6 @@ export_protocol: ONLINE
 freeze_protocol: NO
 
 # unsup training
-gradient_update: 1
 topK: 5
 latentMDP_update_frequency: 1
 encoder_update_epochs: 1

@@ -73,6 +73,28 @@ class Workspace(object):
         self.episode=0
         self.interactions=0
         
+        self.logger.log('train/batch_reward', 0, 0)
+        self.logger.log('train_critic/loss', 0, 0)
+        self.logger.log('train_actor/loss', 0, 0)
+        self.logger.log('train_actor/entropy', 0, 0)
+        self.logger.log('train/gradnorm', 0, 0)
+        self.logger.log('train/batchvalue', 0, 0)
+        self.logger.log('train/explained_variance', 0, 0)
+        self.logger.log('train/learning_rate', 0, 0)
+        self.logger.log('train/approx_kl', 0, 0)
+        self.logger.log('train/old_approx_kl', 0, 0)
+        self.logger.log('train/clipfrac', 0, 0)
+        self.logger.log('train/episode', 0, 0)
+        self.logger.log('train/episode_reward', 0, 0)
+        self.logger.log('train/true_episode_reward', 0, 0)
+        self.logger.log('train/episode_length', 0, 0)
+        self.logger.log('train/duration', 0, 0)
+        self.logger.log('train/total_duration', 0, 0)
+        if self.cfg.log_success:
+            self.logger.log('train/episode_success', 0, 0)
+            self.logger.log('train/true_episode_success', 0, 0)
+
+        self.logger.dump(0, ty='train')
         print('INIT COMPLETE')
         
     @property

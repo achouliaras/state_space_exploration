@@ -64,16 +64,17 @@ class PPO(Agent):
             # self.autoencoder = self._create_AutoEncoder()
             # self.autoencoder_optimizer = torch.optim.Adam(self.autoencoder.parameters(), lr=self.lr) # CHECK     
             # self.autoencoder_loss_fn = nn.MSELoss()
-            self.encoder_update_epochs = cfg.encoder_update_epochs
 
             # pre-training
             self.latentMDP = self._create_LatentMDPModel()
             self.latentMDP_optimizer = torch.optim.Adam(self.latentMDP.parameters(), lr=self.lr) # CHECK
             
-            # online pretraining
-            # AC model for policy learning
-            self.acmodel = self._create_ACModel()
-            self.optimizer = torch.optim.Adam(self.acmodel.parameters(), lr=self.lr, eps=1e-08) # CHECK
+            if 'encoder_update_epochs' in cfg:
+                self.encoder_update_epochs = cfg.encoder_update_epochs
+                # online pretraining
+                # AC model for policy learning
+                self.acmodel = self._create_ACModel()
+                self.optimizer = torch.optim.Adam(self.acmodel.parameters(), lr=self.lr, eps=1e-08) # CHECK
 
         # change mode
         self.train()
@@ -149,11 +150,12 @@ class PPO(Agent):
 
     def get_pretrain_action(self, obs, action = None, memory = None):
             # On PPO update it does not change the encoder
-            with torch.no_grad():
-                if self.has_memory:
-                    z_t, memory = self.latentMDP.encoder.forward(obs, memory)
-                else:
-                    z_t, _ = self.latentMDP.encoder.forward(obs)
+            # with torch.no_grad():
+            # This WILL update the ENCODER
+            if self.has_memory:
+                z_t, memory = self.latentMDP.encoder.forward(obs, memory)
+            else:
+                z_t, _ = self.latentMDP.encoder.forward(obs)
 
             if self.action_type == 'Continuous':
                 (mean, log_std), state_value, _ = self.acmodel.forward(z_t)
@@ -193,7 +195,7 @@ class PPO(Agent):
         if "OFFLINE" in mode:
             # self.autoencoder.save_model(model_dir, step)
             self.latentMDP.save_model(model_dir, step)
-        if "ONLINE" in mode:
+        elif "ONLINE" in mode:
             self.latentMDP.save_model(model_dir, step)
             self.acmodel.save_model(model_dir, step)
         else:
@@ -231,7 +233,7 @@ class PPO(Agent):
         batch_size = self.num_update_steps * 4 
         obs, actions, rewards, dones = trajectory
         not_dones_t = 1 - dones
-        sequence_ids = list(range(0, steps-self.sequence_length-1,self.sequence_length))
+        sequence_ids = list(range(0, steps-self.sequence_length,self.sequence_length))
         no_batches = int(len(sequence_ids) // batch_size)
 
         for _ in range(no_batches):
@@ -321,7 +323,7 @@ class PPO(Agent):
         memories = torch.cat((memories,next_memory.unsqueeze(0)), dim=0)
         
         batch_size = self.num_update_steps
-        sequence_ids = list(range(0, batch_size-self.sequence_length-1))
+        sequence_ids = list(range(0, batch_size-self.sequence_length))
         no_minibatches = max(int(len(sequence_ids) // self.minibatch_size),1)
 
         for epoch in range(self.encoder_update_epochs):
@@ -415,7 +417,6 @@ class PPO(Agent):
     def pretrain_update(self, trajectory, next, logger, step):
         obs, actions, logprobs, values, rewards, dones, memories, next_obs, next_done, next_memory = self.to_tensor(trajectory, next)
         
-        # On PPO update it does not change the encoder
         with torch.no_grad():
             if self.has_memory:
                 next_mask = 1-next_done
@@ -489,6 +490,7 @@ class PPO(Agent):
                         
                         _, newlogprob, entropy, newvalue, memory = self.get_pretrain_action(obs_tensor, b_actions[i], memory_tensor * mask_tensor)
                     else:
+                        obs_tensor, _ = self.latentMDP.encoder.forward(obs_tensor, next_memory*next_mask)
                         _, newlogprob, entropy, newvalue, _ = self.get_pretrain_action(obs_tensor, b_actions[i])
                     logratio = newlogprob - b_logprobs[i]
                     ratio = logratio.exp()

@@ -4,11 +4,11 @@ from agent.common.replay_buffers import NovelExperienceMemory
     
 class IntrinsicRewardModel:
     def __init__(self, model=None, capacity=64, batch_size = 64, action_type ='Discrete', 
-                 local_reward_coef=0.5, global_reward_coef=0.5, has_memory=False, device= 'cpu'):  
+                 local_reward_coef=0.5, global_reward_coef=0.5, has_memory=False, k = 5, device= 'cpu'):  
         self.model = model
         encoder = model.create_network().double().to(device)
         encoder.load_state_dict(self.model.encoder.state_dict())
-        self.experience_memory = NovelExperienceMemory(capacity=capacity, encoder=encoder)
+        self.experience_memory = NovelExperienceMemory(capacity=capacity, k=k, encoder=encoder)
         self.eps = 1 #self.experience_memory.eps
         self.batch_size = batch_size
         self.action_type = action_type
@@ -16,11 +16,11 @@ class IntrinsicRewardModel:
         self.g_coef = global_reward_coef
         self.has_memory = has_memory
         self.device = device
-        self.loss_mean = 0
-        self.loss_std = 1
+        # self.loss_mean = 0
+        # self.loss_std = 1
 
-    def update_LMDP_params(self, new_LMDP_params):
-        self.model.load_state_dict(new_LMDP_params)
+    def update_model_params(self, new_model_params):
+        self.model.load_state_dict(new_model_params)
         self.experience_memory.update_embeddings(self.model.encoder.state_dict())
 
     def calculate_intrinsic_reward(self, obs, actions, memories, dones, next_obs, next_done, next_memory, logger, step, add=True):
@@ -50,8 +50,7 @@ class IntrinsicRewardModel:
         logger.log('train/intrinsic_reward', rewards.mean(), step)
         logger.log('train/local_reward', local_reward.mean(), step)
         logger.log('train/global_reward', global_reward.mean(), step)
-        
-        return rewards
+        return rewards.reshape(-1,1)
 
     def r_hat(self, obs_tensor, action, memory_tensor, mask_tensor, next_obs, next_done, next_memory, logger, step, add=False):
         obs = obs_tensor.squeeze(1)
@@ -90,9 +89,9 @@ class IntrinsicRewardModel:
             novelty_score = self.experience_memory.try_add(obs, memory)
         else:
             novelty_score, _, _ = self.experience_memory.estimate_novelty_score(obs, memory)
-        abs_loss = torch.abs(novelty_score.detach().cpu()).numpy()
-        abs_loss / (self.eps + abs_loss)
-        return abs_loss
+        novelty_score = torch.abs(novelty_score.detach().cpu()).numpy()
+        novelty_score / (self.eps + novelty_score)
+        return novelty_score
 
     # Maximized by finding misrepresented states by the latent MDP. 
     # Reward drops when the latent MDP model learns the neighborhood. 
@@ -121,10 +120,11 @@ class IntrinsicRewardModel:
             loss = 1.0 * action_loss
             
             if loss.shape[0] > 1:
-                self.loss_mean = loss.mean()
-                self.loss_std = loss.std()
+                # self.loss_mean = loss.mean()
+                # self.loss_std = loss.std()
+                loss += 0.1 * contrastive_loss
         
-        loss = (loss-self.loss_mean) / self.loss_std
+        # loss = (loss-self.loss_mean) / self.loss_std
         loss = loss.detach().cpu() # Find states the LMDP model can't understand
         abs_loss = torch.abs(loss).numpy()
         return abs_loss / (self.eps + abs_loss)

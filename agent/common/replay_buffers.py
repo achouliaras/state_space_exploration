@@ -6,7 +6,7 @@ from torchrl.data import LazyTensorStorage
 from torchrl.data.replay_buffers.samplers import RandomSampler
 
 class NovelExperienceMemory(torchrl.data.ReplayBuffer):
-    def __init__(self, capacity=64, k=5, threshold=0.001, device="cuda", encoder=None):
+    def __init__(self, capacity=1024, k=5, threshold=0.01, device="cuda", encoder=None):
         super().__init__(
             storage=LazyTensorStorage(capacity, device=device),
             sampler=RandomSampler(),
@@ -70,7 +70,6 @@ class NovelExperienceMemory(torchrl.data.ReplayBuffer):
 
         # Select novel states. 1 for novel states 0 for not novel enough
         novel_mask = similarities < self.threshold
-
         return (1-similarities)*novel_mask, similarities, novel_mask
 
     def try_add(self, obs, memory):
@@ -129,9 +128,22 @@ class NovelExperienceMemory(torchrl.data.ReplayBuffer):
         
         # Find k-nearest neighbors for each query
         knn_dists, _ = torch.topk(dists, k=self.k, dim=1, largest=False, sorted=True)
-        
+
         # Convert distances to similarities (you can use other similarity measures)
         similarities = self.eps / (self.eps + knn_dists.mean(dim=1))
+
+        # # Normalize embeddings to unit length
+        # query_embeddings = query_embeddings / query_embeddings.norm(dim=1, keepdim=True)
+        # target_embeddings = target_embeddings / target_embeddings.norm(dim=1, keepdim=True)
+        
+        # # Compute cosine similarity (dot product of normalized vectors)
+        # cosine_similarities = torch.mm(query_embeddings, target_embeddings.t())
+        
+        # # Find k-nearest neighbors for each query
+        # knn_sims, _ = torch.topk(cosine_similarities, k=self.k, dim=1, largest=True, sorted=True)
+        
+        # # Convert distances to similarities (you can use other similarity measures)
+        # similarities = knn_sims.mean(dim=1)
         return similarities    
 
     def _update_novelty_scores(self):
@@ -141,18 +153,131 @@ class NovelExperienceMemory(torchrl.data.ReplayBuffer):
             
         # Compute pairwise similarities
         valid_embeddings = self.state_embeddings[:self.ptr] if not self.full else self.state_embeddings
+
         dists = torch.cdist(valid_embeddings, valid_embeddings, p=2)
         eye = torch.eye(valid_embeddings.shape[0], device=self.device).bool()
         dists[eye] = float('inf')  # Ignore self-similarity
-        
         # Get k-nearest similarities for each state
         knn_dists, _ = torch.topk(dists, k=self.k, dim=1, largest=False)
         mean_kdist = knn_dists.mean(dim=1)
         self.novelty_scores[:len(valid_embeddings)] = mean_kdist / (self.eps + mean_kdist)
 
+        # valid_embeddings = valid_embeddings / valid_embeddings.norm(dim=1, keepdim=True)
+        # cosine_similarities = torch.mm(valid_embeddings, valid_embeddings.t())
+        # eye = torch.eye(valid_embeddings.shape[0], device=self.device).bool()
+        # cosine_similarities[eye] = 0  # Ignore self-similarity        
+        # knn_sims, _ = torch.topk(cosine_similarities, k=self.k, dim=1, largest=True)
+        # mean_sims = knn_sims.mean(dim=1)
+        # self.novelty_scores[:len(valid_embeddings)] = mean_sims
+
     def __len__(self):
         return self.ptr if not self.full else self.capacity
+
+class TrajectoryBuffer(object):
+    """Buffer to store environment transitions."""
+    def __init__(self, obs_shape, action_shape, capacity, has_memory, memory_size=128, window=1):
+        self.capacity = capacity
+        self.has_memory = has_memory
+        self.memory_size = memory_size
+
+        self.obses = np.empty((capacity, 1, *obs_shape), dtype=np.float64)
+        self.actions = np.empty((capacity, 1, *action_shape), dtype=np.float64)
+        self.log_probs = np.empty((capacity, 1), dtype=np.float64)
+        self.rewards = np.empty((capacity, 1), dtype=np.float64)
+        self.dones = np.empty((capacity, 1), dtype=np.float64)
+        self.values = np.empty((capacity, 1), dtype=np.float64)
+        self.memories = None
+        if self.has_memory:
+            print(memory_size)
+            self.memories = np.empty((capacity, 1, *memory_size), dtype=np.float64)
+
+        self.window = window
+
+        self.idx = 0
+        self.last_save = 0
+        self.full = False
+
+    def __len__(self):
+        return self.capacity if self.full else self.idx
+
+    def add(self, trajectory, next_state):
+        obs, action, logprob, value, reward, next_obs, done, memory = trajectory
+        next_obs, next_done, next_memory = next_state
+
+        self.next_obs = next_obs
+        self.next_done = next_done
+        self.next_memory = next_memory
+
+        np.copyto(self.obses[self.idx], obs)
+        np.copyto(self.actions[self.idx], action)
+        np.copyto(self.log_probs[self.idx], logprob)
+        np.copyto(self.values[self.idx], value)
+        np.copyto(self.rewards[self.idx], reward)
+        np.copyto(self.dones[self.idx], done)
+        if self.has_memory:
+            np.copyto(self.memories[self.idx], memory)
+
+        self.idx = (self.idx + 1) % self.capacity
+        self.full = self.full or self.idx == 0
     
+    def add_batch(self, trajectory, next_state):
+        obs, action, logprob, value, reward, done, memory = trajectory
+        next_obs, next_done, next_memory = next_state
+
+        self.next_obs = next_obs
+        self.next_done = next_done
+        self.next_memory = next_memory
+        
+        next_index = self.idx + self.window
+        if next_index >= self.capacity:
+            self.full = True
+            maximum_index = self.capacity - self.idx
+            np.copyto(self.obses[self.idx:self.capacity], obs[:maximum_index])
+            np.copyto(self.actions[self.idx:self.capacity], action[:maximum_index])
+            np.copyto(self.log_probs[self.idx:self.capacity], logprob[:maximum_index])
+            np.copyto(self.values[self.idx:self.capacity], value[:maximum_index])
+            np.copyto(self.rewards[self.idx:self.capacity], reward[:maximum_index])
+            np.copyto(self.dones[self.idx:self.capacity], done[:maximum_index])
+            if self.has_memory:
+                np.copyto(self.memories[self.idx:self.capacity], memory[:maximum_index])
+
+            remain = self.window - (maximum_index)
+            if remain > 0:
+                np.copyto(self.obses[0:remain], obs[maximum_index:])
+                np.copyto(self.actions[0:remain], action[maximum_index:])
+                np.copyto(self.log_probs[0:remain], logprob[maximum_index:])
+                np.copyto(self.rewards[0:remain], reward[maximum_index:])
+                np.copyto(self.dones[0:remain], done[maximum_index:])
+                np.copyto(self.values[0:remain], value[maximum_index:])
+                if self.has_memory:
+                    np.copyto(self.memories[0:remain], memory[maximum_index:])
+            self.idx = remain
+        else:
+            np.copyto(self.obses[self.idx:next_index], obs)
+            np.copyto(self.actions[self.idx:next_index], action)
+            np.copyto(self.log_probs[self.idx:next_index], logprob)
+            np.copyto(self.values[self.idx:next_index], value)
+            np.copyto(self.rewards[self.idx:next_index], reward)
+            np.copyto(self.dones[self.idx:next_index], done)
+            if self.has_memory:
+                np.copyto(self.memories[self.idx:next_index], memory)
+            self.idx = next_index
+    
+    def get_data(self):
+        cap = self.capacity if self.full else self.idx
+        obses = np.concatenate((self.obses[self.idx:cap], self.obses[:self.idx])) 
+        actions = np.concatenate((self.actions[self.idx:cap], self.actions[:self.idx]))
+        log_probs = np.concatenate((self.log_probs[self.idx:cap],self.log_probs[:self.idx]))
+        values = np.concatenate((self.values[self.idx:cap],self.values[:self.idx]))
+        rewards = np.concatenate((self.rewards[self.idx:cap],self.rewards[:self.idx]))
+        dones = np.concatenate((self.dones[self.idx:cap],self.dones[:self.idx]))
+        if self.has_memory:
+            memories = np.concatenate((self.memories[self.idx:cap],self.memories[:self.idx]))
+        next_obs = self.next_obs
+        next_done = self.next_done
+        next_memory = self.next_memory
+        return [obses, actions, log_probs, values, rewards, dones, memories],[next_obs,next_done,next_memory]
+
 class ReplayBuffer(object):
     """Buffer to store environment transitions."""
     def __init__(self, obs_space, obs_shape, action_shape, action_type, capacity, device, window=1):
