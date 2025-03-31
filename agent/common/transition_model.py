@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
 from agent.common.actor_critic.critic_only import SimpleCritic
 from agent.common.actor_critic.actor_only import SimpleActor
 from agent.common.feature_extraction.encoder import Encoder
@@ -119,8 +120,33 @@ class LatentMDPModel(torch.nn.Module):
         self.cross_entropy_loss = nn.CrossEntropyLoss()
         self.eval_cross_entropy = nn.CrossEntropyLoss(reduction='none')
         self.wasserstein_loss = SamplesLoss(loss='sinkhorn', p=2, blur=0.05)
-        self.hinge_loss = nn.HingeEmbeddingLoss()
         self.l1_loss = nn.L1Loss()
+
+    def contrastive_loss(self, states, embeddings, temporal_window=1, temperature = 0.1):
+        # Encode states
+        embeddings = F.normalize(embeddings, p=2, dim=1)  # Normalize embeddings
+
+        # Positive pairs: states within temporal_window
+        pos_pairs = []
+        for t in range(len(states) - temporal_window):
+            pos_pairs.append((embeddings[t], embeddings[t + 1]))  # Consecutive states
+
+        # Negative pairs: states outside temporal_window
+        neg_pairs = []
+        for t in range(len(states)):
+            neg_indices = [i for i in range(len(states)) if abs(i - t) > temporal_window]
+            neg_pairs.extend([(embeddings[t], embeddings[i]) for i in neg_indices])
+
+        # Compute similarity for positive and negative pairs
+        pos_sim = torch.stack([torch.dot(z1, z2) for z1, z2 in pos_pairs]) / temperature
+        neg_sim = torch.stack([torch.dot(z1, z2) for z1, z2 in neg_pairs]) / temperature
+
+        # Contrastive loss (InfoNCE)
+        numerator = torch.exp(pos_sim)
+        denominator = numerator + torch.sum(torch.exp(neg_sim))
+        loss = -torch.log(numerator / denominator).mean()
+
+        return loss
 
     @property
     def embedding_size(self):

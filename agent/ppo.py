@@ -131,14 +131,20 @@ class PPO(Agent):
     def reset_actor(self):
         # reset actor and critic
         self.acmodel.reset_actor()
+        self.acmodel.double()
+        self.acmodel.to(self.device)
     
     def reset_critic(self):
         # reset actor and critic
         self.acmodel.reset_critic()
+        self.acmodel.double()
+        self.acmodel.to(self.device)
 
     def reset_network(self):
         # reset network
         self.acmodel.reset_network()
+        self.acmodel.double()
+        self.acmodel.to(self.device)
         
     def train(self, training=True):
         self.training = training
@@ -149,9 +155,7 @@ class PPO(Agent):
             self.latentMDP.train(training=training)
 
     def get_pretrain_action(self, obs, action = None, memory = None):
-            # On PPO update it does not change the encoder
-            # with torch.no_grad():
-            # This WILL update the ENCODER
+            # This WILL update the ENCODER on PPO update
             if self.has_memory:
                 z_t, memory = self.latentMDP.encoder.forward(obs, memory)
             else:
@@ -278,15 +282,11 @@ class PPO(Agent):
                 # Best so far.
                 action_loss = self.latentMDP.cross_entropy_loss(pred_action_logprobs, action_tensor)
 
-                # z_a = z_t1[:batch_size//2]
-                # z_b = z_t1[batch_size//2:]
-                
-                # contrastive_loss = self.latentMDP.hinge_loss(z_a, z_b) # not any effect, at least no harm
                 # contrastive_loss = -1 * self.latentMDP.wasserstein_loss(z_a, z_b) # Bad result
 
                 # transition_loss = self.latentMDP.mse_loss(z_hat_t1, z_t1) # Decent alone, not good with action loss
                 # transition_loss = self.latentMDP.wasserstein_loss(z_hat_t1, z_t1) # Not good enough
-
+                
                 # locality_loss = self.latentMDP.l1_loss(z_t, z_t1) # Big performance drop
                 # locality_loss = self.latentMDP.wasserstein_loss(z_t, z_t1) # Performance drop
 
@@ -372,11 +372,12 @@ class PPO(Agent):
 
                     # Best so far.
                     action_loss = self.latentMDP.cross_entropy_loss(pred_action_logprobs, action_tensor)
-
-                    {
-                    # z_a = z_t1[:num_update_steps//2]
-                    # z_b = z_t1[num_update_steps//2:]
                     
+                    # z_a = z_t1[:self.minibatch_size//2]
+                    # z_b = z_t1[self.minibatch_size//2:]
+                    
+                    contrastive_loss = self.latentMDP.contrastive_loss(obs_tensor, z_t, temporal_window=2)
+
                     # contrastive_loss = self.latentMDP.hinge_loss(z_a, z_b) # not any effect, at least no harm
                     # contrastive_loss = -1 * self.latentMDP.wasserstein_loss(z_a, z_b) # Bad result
 
@@ -385,9 +386,10 @@ class PPO(Agent):
 
                     # locality_loss = self.latentMDP.l1_loss(z_t, z_t1) # Big performance drop
                     # locality_loss = self.latentMDP.wasserstein_loss(z_t, z_t1) # Performance drop
-                    }
+                    # locality_loss = self.latentMDP.hinge_loss(z_t, z_t1)
+                    
                     # Bisimilarity loss
-                    loss = 1.0 * action_loss
+                    loss = 1.0 * action_loss + 0.5 * contrastive_loss
                     
                     # loss = self.autoencoder_loss_fn(prediction_obs, obs_tensor)
                     
@@ -458,23 +460,6 @@ class PPO(Agent):
                 # Flatten and reshape the data
                 b_obs, b_actions, b_logprobs, b_values, b_dones, b_memories, b_advantages, b_returns = self.reshape_batch(obs_t, actions_t, 
                                                                         logprobs_t, values_t, dones_t, memories_t, advantages_t, returns_t)
-
-                # print(obs_t.shape)
-                # print(b_obs.shape)
-                # print(actions_t.shape)
-                # print(b_actions.shape)
-                # print(logprobs_t.shape)
-                # print(b_logprobs.shape)
-                # print(values_t.shape)
-                # print(b_values.shape)
-                # print(dones_t.shape)
-                # print(b_dones.shape)
-                # print(memories_t.shape)
-                # print(b_memories.shape)
-                # print(advantages_t.shape)
-                # print(b_advantages.shape)
-                # print(returns_t.shape)
-                # print(b_returns.shape)
                 
                 batch_entropy = 0
                 batch_value = 0

@@ -27,6 +27,10 @@ class NovelExperienceMemory(torchrl.data.ReplayBuffer):
         self.ptr = 0
         self.full =False
     
+    @property
+    def usage(self):
+        return self.ptr / self.capacity
+
     def update_embeddings(self, new_encoder_params):
         """Refresh all embeddings using the new encoder"""
         self.encoder.load_state_dict(new_encoder_params)

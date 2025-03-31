@@ -53,7 +53,8 @@ class Workspace(object):
         if cfg.import_model:
             self.agent, _ = agent_setup.load_agent(self.work_dir, self.cfg, self.agent, mode=cfg.import_protocol)
             if cfg.freeze_protocol != 'NO': self.agent.freeze_models(mode=cfg.freeze_protocol)
-        # self.agent.reset_critic()
+            # self.agent.reset_actor()
+            # self.agent.reset_critic()
 
         # If you add parallel envs adjust size
         self.obs = np.zeros((self.num_update_steps, 1) + self.obs_space.shape)
@@ -87,7 +88,7 @@ class Workspace(object):
         self.logger.log('train/episode', 0, 0)
         self.logger.log('train/episode_reward', 0, 0)
         self.logger.log('train/true_episode_reward', 0, 0)
-        self.logger.log('train/episode_length', 0, 0)
+        self.logger.log('train/episode_length', cfg.max_episode_steps, 0)
         self.logger.log('train/duration', 0, 0)
         self.logger.log('train/total_duration', 0, 0)
         if self.cfg.log_success:
