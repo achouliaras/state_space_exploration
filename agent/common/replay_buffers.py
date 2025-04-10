@@ -92,18 +92,18 @@ class NovelExperienceMemory(torchrl.data.ReplayBuffer):
         # Add novel states to buffer
         if num_novel > 0:
             remaining_capacity = self.capacity - self.ptr
-            if remaining_capacity >= num_novel:
+            if  num_novel <= remaining_capacity:
                 # Add to end of buffer
                 self.observations[self.ptr:(self.ptr+num_novel)] = novel_obs
                 self.memories[self.ptr:(self.ptr+num_novel)] = novel_mem
                 self.state_embeddings[self.ptr:(self.ptr+num_novel)] = novel_embeddings
                 self.ptr += num_novel
-            else:
+            elif num_novel > remaining_capacity:
                 # Fill remaining space and evict old entries
                 self.observations[self.ptr:] = novel_obs[:remaining_capacity]
                 self.memories[self.ptr:] = novel_mem[:remaining_capacity]
                 self.state_embeddings[self.ptr:] = novel_embeddings[:remaining_capacity]
-
+                
                 # Evict least novel entries for remaining
                 _, evict_indices = torch.topk(self.novelty_scores, k=num_novel - remaining_capacity, largest=False)
                 
@@ -117,7 +117,7 @@ class NovelExperienceMemory(torchrl.data.ReplayBuffer):
             # Update novelty scores
             self._update_novelty_scores()
 
-        return reward
+        return reward, num_novel
 
     def _encode_states(self, obs, memory):
         """Encode observations using current encoder"""

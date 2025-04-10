@@ -4,7 +4,7 @@ from agent.common.replay_buffers import NovelExperienceMemory
     
 class IntrinsicRewardModel:
     def __init__(self, model=None, capacity=64, batch_size = 64, action_type ='Discrete', 
-                 local_reward_coef=0.75, global_reward_coef=0.25, has_memory=False, k = 5, device= 'cpu'):  
+                 local_reward_coef=0.5, global_reward_coef=0.5, has_memory=False, k = 5, device= 'cpu'):
         self.model = model
         encoder = model.create_network().double().to(device)
         encoder.load_state_dict(self.model.encoder.state_dict())
@@ -41,7 +41,7 @@ class IntrinsicRewardModel:
             next_memory = torch.cat([memories[1:], next_memory])
         
         local_reward = self.calculate_local_reward(obs, actions, mask, memories, next_obs, next_mask, next_memory)
-        global_reward = self.calculate_global_reward(next_obs, next_memory*next_mask, add)
+        global_reward, num_novel = self.calculate_global_reward(next_obs, next_memory*next_mask, add)
         
         # print(local_reward, global_reward)
         
@@ -51,6 +51,8 @@ class IntrinsicRewardModel:
         logger.log('train/local_reward', local_reward.mean(), step)
         logger.log('train/global_reward', global_reward.mean(), step)
         logger.log('train/XPMem_usage', self.experience_memory.usage*100, step)
+        logger.log('train/novel_states', num_novel, step)
+        
         return rewards.reshape(-1,1)
 
     def r_hat(self, obs_tensor, action, memory_tensor, mask_tensor, next_obs, next_done, next_memory, logger, step, add=False):
@@ -70,7 +72,7 @@ class IntrinsicRewardModel:
             next_memory = torch.cat([memory[1:], next_memory])
 
         local_reward = self.calculate_local_reward(obs, action, mask, memory, next_obs, next_mask, next_memory)
-        global_reward = self.calculate_global_reward(next_obs, next_memory*next_mask, add)
+        global_reward, _ = self.calculate_global_reward(next_obs, next_memory*next_mask, add)
         
         # print(local_reward, global_reward)
 
@@ -87,11 +89,22 @@ class IntrinsicRewardModel:
     # Returns 0 if the state isn't dissimilar to it's kNN
     def calculate_global_reward(self, obs, memory, add=False):
         if add:
-            novelty_score = self.experience_memory.try_add(obs, memory)
+            if self.batch_size <= self.experience_memory.capacity:
+                novelty_score, num_novel = self.experience_memory.try_add(obs, memory)
+            else:
+                num_novel=0
+                novelty_score=torch.empty(self.batch_size)
+                for i in range(0, self.batch_size, self.experience_memory.capacity):
+                    obs_batch = obs[i:i+self.experience_memory.capacity]
+                    memory_batch = memory[i:i+self.experience_memory.capacity]
+                    batch_novelty_score, batch_num_novel = self.experience_memory.try_add(obs_batch, memory_batch)
+                    novelty_score[i:i+self.experience_memory.capacity]=batch_novelty_score
+                    num_novel+=batch_num_novel
         else:
             novelty_score, _, _ = self.experience_memory.estimate_novelty_score(obs, memory)
+            num_novel = 0
         novelty_score = torch.abs(novelty_score.detach().cpu()).numpy()
-        return novelty_score
+        return novelty_score, num_novel
 
     # Maximized by finding misrepresented states by the latent MDP. 
     # Reward drops when the latent MDP model learns the neighborhood. 
@@ -112,7 +125,7 @@ class IntrinsicRewardModel:
             
             if loss.shape[0] > 1:
                 contrastive_loss = self.model.contrastive_loss(obs, z_t, temporal_window=2)
-                loss += 0.5 * contrastive_loss
+                loss += 0.25 * contrastive_loss
 
                 # self.loss_mean = loss.mean()
                 # self.loss_std = loss.std()

@@ -28,16 +28,17 @@ num_cores=4
 # Calculate episodes per process to generate
 episodes_per_core=$(($episodes_2_generate / $num_cores))
 
+# 10 20 50 100 200
 for offline_epochs in 10 20 50 100 200; do
        test_name="LMDP_Offline_5E5_$offline_epochs"
 
        # 1 2 3 4 5 6 7 8 9 10
        for seed in 1 2 3 4 5 6 7 8 9 10; do
-              # Offline Training script
-              python -m learning_offline.pretraining device=$device \
-                     domain=$domain env=$env render_mode=rgb_array max_episode_steps=100 seed=$seed architecture=$architecture \
-                     offline_epochs=$offline_epochs export_protocol=$off_export_protocol \
-                     num_seed_steps=$offline_num_seed_steps debug=True test=$test_name
+              # # Offline Training script
+              # python -m learning_offline.pretraining device=$device \
+              #        domain=$domain env=$env render_mode=rgb_array max_episode_steps=100 seed=$seed architecture=$architecture \
+              #        offline_epochs=$offline_epochs export_protocol=$off_export_protocol \
+              #        num_seed_steps=$offline_num_seed_steps debug=True test=$test_name
 
               # # Pretraining script
               # python -m learning_on_policy.pretraining device=$device \

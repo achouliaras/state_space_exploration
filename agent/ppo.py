@@ -389,7 +389,7 @@ class PPO(Agent):
                     # locality_loss = self.latentMDP.hinge_loss(z_t, z_t1)
                     
                     # Bisimilarity loss
-                    loss = 1.0 * action_loss + 0.5 * contrastive_loss
+                    loss = 1.0 * action_loss + 0.25 * contrastive_loss
                     
                     # loss = self.autoencoder_loss_fn(prediction_obs, obs_tensor)
                     

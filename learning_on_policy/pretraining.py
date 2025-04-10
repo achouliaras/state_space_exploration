@@ -40,7 +40,8 @@ class Workspace(object):
         self.logger = Logger(
             cfg.models_dir,
             save_tb=cfg.log_save_tb,
-            seed=cfg.seed,
+            train_file='pre_train',
+            eval_file='pretrain_eval',
             log_frequency=cfg.log_frequency,
             agent=cfg.agent.name)
 
@@ -50,7 +51,7 @@ class Workspace(object):
         self.env.action_space.seed(cfg.seed)
         self.cfg = cfg
         
-        self.num_update_steps = self.cfg.agent.action_cfg.batch_size  #* 4 256
+        self.num_update_steps = self.cfg.agent.action_cfg.batch_size * 4  # 256
         self.batch_size =  int(self.num_update_steps) # x num_of_envs
         self.cfg.agent.action_cfg.batch_size = self.batch_size
         self.num_iterations = int((self.cfg.num_unsup_steps+1) // self.batch_size)
@@ -119,6 +120,7 @@ class Workspace(object):
         self.logger.log('train/local_reward', 0, 0)
         self.logger.log('train/global_reward', 0, 0)
         self.logger.log('train/XPMem_usage', 0, 0)
+        self.logger.log('train/novel_states', 0, 0)
         self.logger.log('train/episode', 0, 0)
         self.logger.log('train/episode_reward', 0, 0)
         # self.logger.log('train/true_episode_reward', 0, 0)
