@@ -32,7 +32,6 @@ class Workspace(object):
         self.logger = Logger(
             cfg.models_dir,
             save_tb=cfg.log_save_tb,
-            seed=cfg.seed,
             log_frequency=cfg.log_frequency,
             agent=cfg.agent.name)
 

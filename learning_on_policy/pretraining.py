@@ -64,11 +64,11 @@ class Workspace(object):
             if cfg.freeze_protocol != 'NO': self.agent.freeze_models(mode=cfg.freeze_protocol)
         # self.agent.reset_critic()
 
-        copy_LMDPmodel = self.agent._create_LatentMDPModel()
-        copy_LMDPmodel.load_state_dict(self.agent.latentMDP.state_dict()) 
+        # copy_LMDPmodel = self.agent._create_LatentMDPModel()
+        # copy_LMDPmodel.load_state_dict(self.agent.latentMDP.state_dict()) 
         
         # pass a copy of the Latent MDP model to the reward model
-        self.reward_model = IntrinsicRewardModel(model=copy_LMDPmodel, capacity=cfg.novelty_buffer_capacity, batch_size=self.num_update_steps, 
+        self.reward_model = IntrinsicRewardModel(model=self.agent, capacity=cfg.novelty_buffer_capacity, batch_size=self.num_update_steps, 
                                                  action_type=self.agent.action_type, has_memory=self.agent.has_memory, k=cfg.topK, device=self.device)
 
         self.traj_B = TrajectoryBuffer(self.obs_space.shape, 
@@ -79,12 +79,12 @@ class Workspace(object):
                                   window=self.num_update_steps)
         
         # # If you add parallel envs adjust size
-        # self.traj_D = TrajectoryBuffer(self.obs_space.shape, 
-        #                           self.cfg.action_space,
-        #                           self.num_update_steps*(1+self.cfg.policy_update_frequency),
-        #                           self.agent.has_memory,
-        #                           self.agent.memory_size,
-        #                           window=self.num_update_steps)
+        self.traj_D = TrajectoryBuffer(self.obs_space.shape, 
+                                  self.cfg.action_space,
+                                  self.num_update_steps*self.num_iterations,
+                                  self.agent.has_memory,
+                                  self.agent.memory_size,
+                                  window=self.num_update_steps)
         
         self.obs = np.zeros((self.num_update_steps, 1) + self.obs_space.shape)
         self.actions = np.zeros((self.num_update_steps, 1) + self.cfg.action_space)
@@ -251,8 +251,8 @@ class Workspace(object):
                         memory = np.zeros(self.agent.memory_size)
 
             # Calculate Intrinsic reward
-            self.rewards = self.reward_model.calculate_intrinsic_reward(self.obs, self.actions, self.memories, self.dones,
-                                                                        next_obs, next_done, next_memory, self.logger, global_step)
+            self.rewards = self.reward_model.calculate_intrinsic_reward([self.obs, self.actions, self.logprobs, self.values, self.rewards, self.dones, self.memories],
+                                                                        [next_obs, next_done, next_memory], self.logger, global_step, diff=False)
 
             trajectory = [self.obs, self.actions, self.logprobs, self.values, self.rewards, self.dones, self.memories]
             next_state = [next_obs, next_done, next_memory]
@@ -261,18 +261,23 @@ class Workspace(object):
             if iteration == 0:
                 agent_data_dept = []
             
+            self.traj_D.add_batch(trajectory, next_state)
+
+            # # Joint updates
+            # new_LMDP_params = self.agent.update_encoder(trajectory, next_state, self.logger, global_step)
+            # self.reward_model.update_model_params(new_LMDP_params)
+            # self.agent.pretrain_update(trajectory, next_state, self.logger, global_step)
+
             # Alternating updates with Data dept
             if (iteration) % self.cfg.policy_update_frequency*2 < self.cfg.policy_update_frequency:
                 self.traj_B.add_batch(trajectory, next_state)
-                # self.traj_D.add_batch(trajectory,next_state)
                 agent_data_dept.append([trajectory, next_state, global_step])
 
                 trajectory, next_state = self.traj_B.get_data()
                 new_LMDP_params = self.agent.update_encoder(trajectory, next_state, self.logger, global_step)
-                self.reward_model.update_model_params(new_LMDP_params)
+                # self.reward_model.update_model_params(new_LMDP_params)
             else:
                 self.traj_B.add_batch(trajectory, next_state)
-                # self.traj_D.add_batch(trajectory,next_state)
                 agent_data_dept.append([trajectory, next_state, global_step])
 
                 for data in agent_data_dept:
@@ -283,10 +288,17 @@ class Workspace(object):
             if self.cfg.log_success:
                 episode_success = max(episode_success, terminated)
 
+        # Update Encoder with all gathered data for one epoch
+        trajectory, next_state = self.traj_D.get_data()
+        self.agent.reset_lmdp_network()
+        for i in tqdm.tqdm(range(self.cfg.offline_epochs), desc="Performing Global Update on LMDP Model: "):
+            new_LMDP_params = self.agent.update_encoder(trajectory, next_state, self.logger, global_step)
+
         episode_time = time.time() - start_time
         total_time += episode_time
         
         self.env.close()
+        self.save_results()
         print('PRE-TRAINING FINISHED')
         self.logger = evaluate_agent(self.agent, self.cfg, self.logger, self.agent.get_pretrain_action)
         self.logger.close()
@@ -322,7 +334,6 @@ def main(cfg : DictConfig):
     
     print(f'Workspace: {work_dir}\nSEED {cfg.seed}')
     workspace.run()
-    workspace.save_results()
     print(f'Experiment with SEED {cfg.seed} finished')
 
 if __name__ == '__main__':

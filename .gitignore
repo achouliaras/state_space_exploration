@@ -184,8 +184,7 @@ cython_debug/
 __pycache__/
 _build/
 
-eval.csv
-train.csv
+*.csv
 
 git_rewrite_commit_history.sh
 d:/

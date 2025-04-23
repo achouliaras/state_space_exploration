@@ -192,7 +192,6 @@ class TrajectoryBuffer(object):
         self.values = np.empty((capacity, 1), dtype=np.float64)
         self.memories = None
         if self.has_memory:
-            print(memory_size)
             self.memories = np.empty((capacity, 1, *memory_size), dtype=np.float64)
 
         self.window = window

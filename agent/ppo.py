@@ -145,6 +145,14 @@ class PPO(Agent):
         self.acmodel.reset_network()
         self.acmodel.double()
         self.acmodel.to(self.device)
+    
+    def reset_lmdp_network(self, reset_lr = True):  
+        # reset lmdp network
+        # pre-training
+        self.latentMDP = self._create_LatentMDPModel()
+        if reset_lr:
+            self.latentMDP_optimizer = torch.optim.Adam(self.latentMDP.parameters(), lr=self.lr)
+            
         
     def train(self, training=True):
         self.training = training
@@ -268,19 +276,19 @@ class PPO(Agent):
                     mask_tensor = not_done_t[i]
                     next_memory_tensor = memories[i+1]
                     next_mask_tensor = not_done_t[i+1]
-                    # prediction_obs, _, memory  = self.autoencoder(obs_tensor, memory_tensor * mask_tensor)
-                    pred_action_logprobs, z_hat_t1, memory, next_memory, z_t, z_t1  = self.latentMDP(obs_tensor, action_tensor, next_obs_tensor, 
-                                                                              memory_tensor * mask_tensor, next_mask_tensor)
+                    prediction_obs, _, memory  = self.autoencoder(obs_tensor, memory_tensor * mask_tensor)
+                    # pred_action_logprobs, z_hat_t1, memory, next_memory, z_t, z_t1  = self.latentMDP(obs_tensor, action_tensor, next_obs_tensor, 
+                    #                                                           memory_tensor * mask_tensor, next_mask_tensor)
                 else:
                     # prediction_obs, _, memory,  = self.autoencoder(obs_tensor)
                     pred_action_logprobs, z_hat_t1, _, _, z_t, z_t1  = self.latentMDP(obs_tensor, action_tensor, next_obs_tensor)
 
                 if self.has_memory and i < self.sequence_length-1:
                     memories[i + 1] = memory.detach()
-                    memories[i + 2] = next_memory.detach() # for MDP modelling
+                    # memories[i + 2] = next_memory.detach() # for MDP modelling
 
-                # Best so far.
-                action_loss = self.latentMDP.cross_entropy_loss(pred_action_logprobs, action_tensor)
+                # # Best so far.
+                # action_loss = self.latentMDP.cross_entropy_loss(pred_action_logprobs, action_tensor)
 
                 # contrastive_loss = -1 * self.latentMDP.wasserstein_loss(z_a, z_b) # Bad result
 
@@ -290,22 +298,22 @@ class PPO(Agent):
                 # locality_loss = self.latentMDP.l1_loss(z_t, z_t1) # Big performance drop
                 # locality_loss = self.latentMDP.wasserstein_loss(z_t, z_t1) # Performance drop
 
-                # Bisimilarity loss
-                loss = 1.0 * action_loss
+                # # Bisimilarity loss
+                # loss = 1.0 * action_loss
                 
-                # loss = self.autoencoder_loss_fn(prediction_obs, obs_tensor)
+                loss = self.autoencoder_loss_fn(prediction_obs, obs_tensor)
 
                 batch_loss += loss
 
             batch_loss = batch_loss/self.sequence_length
             
-            # self.autoencoder_optimizer.zero_grad()
-            # batch_loss.backward()
-            # self.autoencoder_optimizer.step()
-
-            self.latentMDP_optimizer.zero_grad()
+            self.autoencoder_optimizer.zero_grad()
             batch_loss.backward()
-            self.latentMDP_optimizer.step()
+            self.autoencoder_optimizer.step()
+
+            # self.latentMDP_optimizer.zero_grad()
+            # batch_loss.backward()
+            # self.latentMDP_optimizer.step()
 
         # consider only the last batch for reporting the final loss for each epoch
         epoch_loss = batch_loss.item()
@@ -314,6 +322,119 @@ class PPO(Agent):
         logger.log('train_autoencoder/loss', epoch_loss, steps)
         return epoch_loss
 
+    def get_lmdp_loss(self, trajectory, next, diff=False):   
+        obs, actions, _, _, _, dones, memories, next_obs, next_done, next_memory = self.to_tensor(trajectory, next)
+
+        # extend obs, dones, memories with next_obs, next_done, next_memory
+        obs = torch.cat((obs,next_obs.unsqueeze(0)), dim=0)
+        dones = torch.cat((dones,next_done), dim=0)
+        memories = torch.cat((memories,next_memory.unsqueeze(0)), dim=0)
+        
+        batch_size = self.num_update_steps
+        if diff:
+            effective_sequence_length = self.sequence_length + 2
+            sequence_ids = list(range(0, batch_size-effective_sequence_length))
+        else:
+            effective_sequence_length = self.sequence_length + 1
+            sequence_ids = list(range(0, batch_size-effective_sequence_length))
+        # Reshape data by sequence size first, batch size second
+        batch_ids = np.repeat(sequence_ids, effective_sequence_length) + np.tile(np.arange(effective_sequence_length), len(sequence_ids))
+
+        # Create the padding patterns
+        i = np.arange(effective_sequence_length)
+        mask = np.arange(effective_sequence_length) >= (effective_sequence_length - i-1)[:, None]
+        init_pad = np.where(mask, np.arange(effective_sequence_length) - (effective_sequence_length - i-1)[:, None], 0)
+
+        # Combine padding patterns with the original batch (excluding the overlapping parts)
+        batch_ids = np.concatenate([np.array(init_pad).flatten(), batch_ids])
+        # [print(batch_ids[i:i+effective_sequence_length]) for i in range(0, len(batch_ids), effective_sequence_length)]
+
+        obs_t = obs[batch_ids]
+        actions_t = actions[batch_ids]
+        dones_t = dones[batch_ids]
+        memories_t = memories[batch_ids]
+
+        # Flatten and reshape the data
+        b_obs, b_actions, _, _, b_dones, b_memories, _, _ = self.reshape_batch(obs_t, actions_t, None, None, dones_t, memories_t, 
+                                                                               sequence_length=effective_sequence_length,
+                                                                               minibatch_size=batch_size)
+
+        prev_batch_loss = 0 if diff else None
+        batch_loss = 0
+        for i in range(0, self.sequence_length):
+            if diff:
+                prev_obs_tensor = b_obs[i]
+                prev_action_tensor = b_actions[i].squeeze(1)
+            obs_tensor = b_obs[i+1] if diff else b_obs[i]
+            action_tensor = b_actions[i+1].squeeze(1) if diff else b_actions[i].squeeze(1)
+            next_obs_tensor = b_obs[i+2] if diff else b_obs[i+1]
+
+            with torch.no_grad():
+                if self.has_memory:
+                    memory_tensor = b_memories[i+1] if diff else b_memories[i]
+                    mask_tensor = (1-b_dones[i+1]).to(self.device) if diff else (1-b_dones[i]).to(self.device)
+                    next_memory_tensor = b_memories[i+2] if diff else b_memories[i+1]
+                    next_mask_tensor = (1-b_dones[i+2]).to(self.device) if diff else (1-b_dones[i+1]).to(self.device)
+
+                    if diff:
+                        prev_memory_tensor = b_memories[i]
+                        prev_mask_tensor = (1-b_dones[i]).to(self.device)
+                        prev_pred_action_logprobs, prev_z_hat_t1, prev_memory, _, prev_z_t, prev_z_t1  = self.latentMDP(
+                                                                            prev_obs_tensor, prev_action_tensor, obs_tensor, 
+                                                                            prev_memory_tensor * prev_mask_tensor, mask_tensor)
+
+                    # prediction_obs, _, memory  = self.autoencoder(obs_tensor, memory_tensor * mask_tensor)
+                    pred_action_logprobs, z_hat_t1, memory, next_memory, z_t, z_t1  = self.latentMDP(obs_tensor, action_tensor, next_obs_tensor, 
+                                                                            memory_tensor * mask_tensor, next_mask_tensor)
+                else:
+                    if diff:
+                        prev_pred_action_logprobs, prev_z_hat_t1, _, _, prev_z_t, prev_z_t1  = self.latentMDP(
+                                                                            prev_obs_tensor, prev_action_tensor, obs_tensor)
+                    # prediction_obs, _, memory,  = self.autoencoder(obs_tensor)
+                    pred_action_logprobs, z_hat_t1, _, _, z_t, z_t1  = self.latentMDP(obs_tensor, action_tensor, next_obs_tensor)
+
+            if self.has_memory and i < self.sequence_length-1:
+                b_memories[i + 1] = memory.detach()
+                b_memories[i + 2] = next_memory.detach() # for MDP modelling
+            
+            if diff:
+                prev_loss = self.lmdp_loss(prev_pred_action_logprobs, prev_action_tensor, prev_obs_tensor, prev_z_t, prev_z_t1, eval=True)
+                prev_batch_loss += prev_loss
+            loss = self.lmdp_loss(pred_action_logprobs, action_tensor, obs_tensor, z_t, z_t1)
+            # loss = self.autoencoder_loss_fn(prediction_obs, obs_tensor)
+            batch_loss += loss
+        batch_loss = batch_loss/self.sequence_length
+        if diff:
+            prev_batch_loss = prev_batch_loss/self.sequence_length
+            return (batch_loss.detach().cpu(), prev_batch_loss.detach().cpu())
+        return batch_loss.detach().cpu()
+
+    def lmdp_loss(self, pred_action_logprobs, action_tensor, obs_tensor, z_t, z_t1, eval=False):
+        # Best so far.
+        if eval:
+            action_loss = self.latentMDP.eval_cross_entropy(pred_action_logprobs, action_tensor)
+        else:
+            action_loss = self.latentMDP.cross_entropy_loss(pred_action_logprobs, action_tensor)
+        
+        # z_a = z_t1[:self.minibatch_size//2]
+        # z_b = z_t1[self.minibatch_size//2:]
+        
+        contrastive_loss = self.latentMDP.contrastive_loss(obs_tensor, z_t, temporal_window=2)
+
+        # contrastive_loss = self.latentMDP.hinge_loss(z_a, z_b) # not any effect, at least no harm
+        # contrastive_loss = -1 * self.latentMDP.wasserstein_loss(z_a, z_b) # Bad result
+
+        # transition_loss = self.latentMDP.mse_loss(z_hat_t1, z_t1) # Decent alone, not good with action loss
+        # transition_loss = self.latentMDP.wasserstein_loss(z_hat_t1, z_t1) # Not good enough
+
+        # locality_loss = self.latentMDP.l1_loss(z_t, z_t1) # Big performance drop
+        # locality_loss = self.latentMDP.wasserstein_loss(z_t, z_t1) # Performance drop
+        # locality_loss = self.latentMDP.hinge_loss(z_t, z_t1)
+        
+        # Bisimilarity loss
+        loss = 1.0 * action_loss + 0.05 * contrastive_loss
+        return loss
+    
     def update_encoder(self, trajectory, next, logger, step):    
         obs, actions, _, _, rewards, dones, memories, next_obs, next_done, next_memory = self.to_tensor(trajectory, next)
 
@@ -323,21 +444,21 @@ class PPO(Agent):
         memories = torch.cat((memories,next_memory.unsqueeze(0)), dim=0)
         
         batch_size = self.num_update_steps
-        sequence_ids = list(range(0, batch_size-self.sequence_length))
+        effective_sequence_length = self.sequence_length + 1
+        sequence_ids = list(range(0, batch_size-effective_sequence_length))
         no_minibatches = max(int(len(sequence_ids) // self.minibatch_size),1)
 
         for epoch in range(self.encoder_update_epochs):
             # print('Epoch ', epoch)
             print_flag = False
             if epoch == self.encoder_update_epochs -1:
-                logger.log('train/batch_reward', rewards.mean(), step)
                 print_flag = True
             for _ in range(no_minibatches):
                 # Suffle sequence ids
                 sample_ids = np.random.choice(sequence_ids, self.minibatch_size, replace=False)
                 
                 # Reshape data by sequence size first, batch size second
-                batch_ids = np.repeat(sample_ids, self.sequence_length+1) + np.tile(np.arange(self.sequence_length+1), len(sample_ids))
+                batch_ids = np.repeat(sample_ids, effective_sequence_length) + np.tile(np.arange(effective_sequence_length), len(sample_ids))
 
                 obs_t = obs[batch_ids]
                 actions_t = actions[batch_ids]
@@ -345,7 +466,9 @@ class PPO(Agent):
                 memories_t = memories[batch_ids]
 
                 # Flatten and reshape the data
-                b_obs, b_actions, _, _, b_dones, b_memories, _, _ = self.reshape_batch(obs_t, actions_t, None, None, dones_t, memories_t)
+                b_obs, b_actions, _, _, b_dones, b_memories, _, _ = self.reshape_batch(obs_t, actions_t, None, None, dones_t, memories_t, 
+                                                                                       sequence_length=effective_sequence_length, 
+                                                                                       minibatch_size=self.minibatch_size)
 
                 batch_loss = 0
                 for i in range(0, self.sequence_length):
@@ -370,27 +493,7 @@ class PPO(Agent):
                         b_memories[i + 1] = memory.detach()
                         b_memories[i + 2] = next_memory.detach() # for MDP modelling
 
-                    # Best so far.
-                    action_loss = self.latentMDP.cross_entropy_loss(pred_action_logprobs, action_tensor)
-                    
-                    # z_a = z_t1[:self.minibatch_size//2]
-                    # z_b = z_t1[self.minibatch_size//2:]
-                    
-                    contrastive_loss = self.latentMDP.contrastive_loss(obs_tensor, z_t, temporal_window=2)
-
-                    # contrastive_loss = self.latentMDP.hinge_loss(z_a, z_b) # not any effect, at least no harm
-                    # contrastive_loss = -1 * self.latentMDP.wasserstein_loss(z_a, z_b) # Bad result
-
-                    # transition_loss = self.latentMDP.mse_loss(z_hat_t1, z_t1) # Decent alone, not good with action loss
-                    # transition_loss = self.latentMDP.wasserstein_loss(z_hat_t1, z_t1) # Not good enough
-
-                    # locality_loss = self.latentMDP.l1_loss(z_t, z_t1) # Big performance drop
-                    # locality_loss = self.latentMDP.wasserstein_loss(z_t, z_t1) # Performance drop
-                    # locality_loss = self.latentMDP.hinge_loss(z_t, z_t1)
-                    
-                    # Bisimilarity loss
-                    loss = 1.0 * action_loss + 0.25 * contrastive_loss
-                    
+                    loss = self.lmdp_loss(pred_action_logprobs, action_tensor, obs_tensor, z_t, z_t1)                    
                     # loss = self.autoencoder_loss_fn(prediction_obs, obs_tensor)
                     
                     batch_loss += loss
@@ -430,7 +533,8 @@ class PPO(Agent):
         advantages, returns = self.calculate_advantage_and_returns(values, dones, rewards, z_next, next_memory, next_done, next_mask)
 
         batch_size = self.num_update_steps
-        sequence_ids = list(range(0, batch_size-self.sequence_length-1))
+        effective_sequence_length = self.sequence_length + 1
+        sequence_ids = list(range(0, batch_size-effective_sequence_length))
         no_minibatches = max(int(len(sequence_ids) // self.minibatch_size), 1)
 
         self.clipfracs = []
@@ -446,7 +550,7 @@ class PPO(Agent):
                 sample_ids = np.random.choice(sequence_ids, self.minibatch_size, replace=False)
                 
                 # Reshape data by sequence size first, batch size second
-                batch_ids = np.repeat(sample_ids, self.sequence_length+1) + np.tile(np.arange(self.sequence_length+1), len(sample_ids))
+                batch_ids = np.repeat(sample_ids, effective_sequence_length) + np.tile(np.arange(effective_sequence_length), len(sample_ids))
 
                 obs_t = obs[batch_ids]
                 actions_t = actions[batch_ids]
@@ -459,7 +563,9 @@ class PPO(Agent):
                 
                 # Flatten and reshape the data
                 b_obs, b_actions, b_logprobs, b_values, b_dones, b_memories, b_advantages, b_returns = self.reshape_batch(obs_t, actions_t, 
-                                                                        logprobs_t, values_t, dones_t, memories_t, advantages_t, returns_t)
+                                                                        logprobs_t, values_t, dones_t, memories_t, advantages_t, returns_t, 
+                                                                        sequence_length=effective_sequence_length, 
+                                                                        minibatch_size=self.minibatch_size)
                 
                 batch_entropy = 0
                 batch_value = 0
@@ -804,18 +910,18 @@ class PPO(Agent):
         
         return b_obs, b_actions, b_logprobs, b_values, b_dones, b_memories, b_advantages, b_returns
     
-    def reshape_batch(self, obs, actions, logprobs, values, dones, memories=None, advantages=None, returns=None):
+    def reshape_batch(self, obs, actions, logprobs, values, dones, memories=None, advantages=None, returns=None, sequence_length=None, minibatch_size=None):
         # reshape the batch with sequence length first
-        b_obs = obs.reshape((self.sequence_length+1, self.minibatch_size) + tuple(self.obs_dim))
-        b_logprobs = logprobs.reshape((self.sequence_length+1, self.minibatch_size, -1)) if logprobs !=None else None
+        b_obs = obs.reshape((sequence_length, minibatch_size) + tuple(self.obs_dim))
+        b_logprobs = logprobs.reshape((sequence_length, minibatch_size, -1)) if logprobs !=None else None
         if self.action_type == 'Continuous':
-            b_actions = actions.reshape((self.sequence_length+1, self.minibatch_size) + tuple(self.action_dim))
+            b_actions = actions.reshape((sequence_length, minibatch_size) + tuple(self.action_dim))
         elif self.action_type == 'Discrete':
-            b_actions = actions.reshape((self.sequence_length+1, self.minibatch_size,1))
-        b_advantages = advantages.reshape((self.sequence_length+1, self.minibatch_size, -1)) if advantages !=None else None
-        b_returns = returns.reshape((self.sequence_length+1, self.minibatch_size, -1)) if returns !=None else None
-        b_dones = dones.reshape((self.sequence_length+1, self.minibatch_size, -1))
-        b_values = values.reshape((self.sequence_length+1, self.minibatch_size, -1)) if values !=None else None
-        b_memories = memories.reshape((self.sequence_length+1, self.minibatch_size, self.memory_size[0]))  if memories !=None else None
+            b_actions = actions.reshape((sequence_length, minibatch_size,1))
+        b_advantages = advantages.reshape((sequence_length, minibatch_size, -1)) if advantages !=None else None
+        b_returns = returns.reshape((sequence_length, minibatch_size, -1)) if returns !=None else None
+        b_dones = dones.reshape((sequence_length, minibatch_size, -1))
+        b_values = values.reshape((sequence_length, minibatch_size, -1)) if values !=None else None
+        b_memories = memories.reshape((sequence_length, minibatch_size, self.memory_size[0]))  if memories !=None else None
         
         return b_obs, b_actions, b_logprobs, b_values, b_dones, b_memories, b_advantages, b_returns
