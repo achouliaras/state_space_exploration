@@ -29,7 +29,7 @@ class AutoEncoder(nn.Module):
 
     def save_model(self, model_dir, step):
         torch.save(
-            self.network.state_dict(), '%s/decoder_%s.pt' % (model_dir, step)
+            self.network.state_dict(), '%s/network_%s.pt' % (model_dir, step)
         )
         torch.save(
             self.decoder.state_dict(), '%s/decoder_%s.pt' % (model_dir, step)

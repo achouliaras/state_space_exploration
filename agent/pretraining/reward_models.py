@@ -96,7 +96,6 @@ class IntrinsicRewardModel:
     # Maximized by finding key states in the state space that are far away
     # Returns 0 if the state isn't dissimilar to it's kNN
     def calculate_global_reward(self, obs, memory, next_obs, next_memory, add=False):
-        next_obs_novelty, _, _ = self.experience_memory.estimate_novelty_score(next_obs, next_memory)
         if add:
             if self.batch_size <= self.experience_memory.capacity:
                 obs_novelty_score, num_novel = self.experience_memory.try_add(obs, memory)
@@ -112,7 +111,7 @@ class IntrinsicRewardModel:
         else:
             obs_novelty_score, _, _ = self.experience_memory.estimate_novelty_score(obs, memory)
             num_novel = 0
-        
+        next_obs_novelty, _, _ = self.experience_memory.estimate_novelty_score(next_obs, next_memory)
         novelty_score = torch.clamp(next_obs_novelty - 0.5 * obs_novelty_score, min=0).detach().cpu().numpy()
         return novelty_score, num_novel
 
