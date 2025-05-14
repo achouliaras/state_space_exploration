@@ -74,7 +74,8 @@ class NovelExperienceMemory(torchrl.data.ReplayBuffer):
 
         # Select novel states. 1 for novel states 0 for not novel enough
         novel_mask = similarities < self.threshold
-        return (1-similarities)*novel_mask, similarities, novel_mask
+        return (1-similarities), similarities, novel_mask
+        # return (1-similarities)*novel_mask, similarities, novel_mask
 
     def try_add(self, obs, memory):
         """Add state batch to buffer if novel, with eviction policy"""

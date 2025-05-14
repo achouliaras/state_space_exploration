@@ -276,9 +276,9 @@ class PPO(Agent):
                     mask_tensor = not_done_t[i]
                     next_memory_tensor = memories[i+1]
                     next_mask_tensor = not_done_t[i+1]
-                    prediction_obs, _, memory  = self.autoencoder(obs_tensor, memory_tensor * mask_tensor)
-                    # pred_action_logprobs, z_hat_t1, memory, next_memory, z_t, z_t1  = self.latentMDP(obs_tensor, action_tensor, next_obs_tensor, 
-                    #                                                           memory_tensor * mask_tensor, next_mask_tensor)
+                    # prediction_obs, _, memory  = self.autoencoder(obs_tensor, memory_tensor * mask_tensor)
+                    pred_action_logprobs, z_hat_t1, memory, next_memory, z_t, z_t1  = self.latentMDP(obs_tensor, action_tensor, next_obs_tensor, 
+                                                                              memory_tensor * mask_tensor, next_mask_tensor)
                 else:
                     # prediction_obs, _, memory,  = self.autoencoder(obs_tensor)
                     pred_action_logprobs, z_hat_t1, _, _, z_t, z_t1  = self.latentMDP(obs_tensor, action_tensor, next_obs_tensor)
@@ -287,10 +287,11 @@ class PPO(Agent):
                     memories[i + 1] = memory.detach()
                     # memories[i + 2] = next_memory.detach() # for MDP modelling
 
-                # # Best so far.
-                # action_loss = self.latentMDP.cross_entropy_loss(pred_action_logprobs, action_tensor)
+                # Best so far.
+                action_loss = self.latentMDP.cross_entropy_loss(pred_action_logprobs, action_tensor)
 
                 # contrastive_loss = -1 * self.latentMDP.wasserstein_loss(z_a, z_b) # Bad result
+                # contrastive_loss = self.latentMDP.contrastive_loss(obs_tensor, z_t, temporal_window=2)
 
                 # transition_loss = self.latentMDP.mse_loss(z_hat_t1, z_t1) # Decent alone, not good with action loss
                 # transition_loss = self.latentMDP.wasserstein_loss(z_hat_t1, z_t1) # Not good enough
@@ -298,28 +299,29 @@ class PPO(Agent):
                 # locality_loss = self.latentMDP.l1_loss(z_t, z_t1) # Big performance drop
                 # locality_loss = self.latentMDP.wasserstein_loss(z_t, z_t1) # Performance drop
 
-                # # Bisimilarity loss
-                # loss = 1.0 * action_loss
+                # Bisimilarity loss
+                loss = 1.0 * action_loss #+ 0.2 * contrastive_loss
                 
-                loss = self.autoencoder_loss_fn(prediction_obs, obs_tensor)
+                # loss = self.autoencoder_loss_fn(prediction_obs, obs_tensor)
 
                 batch_loss += loss
 
             batch_loss = batch_loss/self.sequence_length
             
-            self.autoencoder_optimizer.zero_grad()
-            batch_loss.backward()
-            self.autoencoder_optimizer.step()
-
-            # self.latentMDP_optimizer.zero_grad()
+            # self.autoencoder_optimizer.zero_grad()
             # batch_loss.backward()
-            # self.latentMDP_optimizer.step()
+            # self.autoencoder_optimizer.step()
+
+            self.latentMDP_optimizer.zero_grad()
+            batch_loss.backward()
+            self.latentMDP_optimizer.step()
 
         # consider only the last batch for reporting the final loss for each epoch
         epoch_loss = batch_loss.item()
         
         epoch_loss /= no_batches
-        logger.log('train_autoencoder/loss', epoch_loss, steps)
+        # logger.log('train_autoencoder/loss', epoch_loss, steps)
+        logger.log('train_lmdp/loss', epoch_loss, steps)
         return epoch_loss
 
     def get_lmdp_loss(self, trajectory, next, diff=False):   
@@ -383,14 +385,12 @@ class PPO(Agent):
                                                                             prev_obs_tensor, prev_action_tensor, obs_tensor, 
                                                                             prev_memory_tensor * prev_mask_tensor, mask_tensor)
 
-                    # prediction_obs, _, memory  = self.autoencoder(obs_tensor, memory_tensor * mask_tensor)
                     pred_action_logprobs, z_hat_t1, memory, next_memory, z_t, z_t1  = self.latentMDP(obs_tensor, action_tensor, next_obs_tensor, 
                                                                             memory_tensor * mask_tensor, next_mask_tensor)
                 else:
                     if diff:
                         prev_pred_action_logprobs, prev_z_hat_t1, _, _, prev_z_t, prev_z_t1  = self.latentMDP(
                                                                             prev_obs_tensor, prev_action_tensor, obs_tensor)
-                    # prediction_obs, _, memory,  = self.autoencoder(obs_tensor)
                     pred_action_logprobs, z_hat_t1, _, _, z_t, z_t1  = self.latentMDP(obs_tensor, action_tensor, next_obs_tensor)
 
             if self.has_memory and i < self.sequence_length-1:
@@ -401,7 +401,6 @@ class PPO(Agent):
                 prev_loss = self.lmdp_loss(prev_pred_action_logprobs, prev_action_tensor, prev_obs_tensor, prev_z_t, prev_z_t1, eval=True)
                 prev_batch_loss += prev_loss
             loss = self.lmdp_loss(pred_action_logprobs, action_tensor, obs_tensor, z_t, z_t1)
-            # loss = self.autoencoder_loss_fn(prediction_obs, obs_tensor)
             batch_loss += loss
         batch_loss = batch_loss/self.sequence_length
         if diff:
@@ -482,11 +481,9 @@ class PPO(Agent):
                         next_memory_tensor = b_memories[i+1]
                         next_mask_tensor = (1-b_dones[i+1]).to(self.device)
 
-                        # prediction_obs, _, memory  = self.autoencoder(obs_tensor, memory_tensor * mask_tensor)
                         pred_action_logprobs, z_hat_t1, memory, next_memory, z_t, z_t1  = self.latentMDP(obs_tensor, action_tensor, next_obs_tensor, 
                                                                                 memory_tensor * mask_tensor, next_mask_tensor)
                     else:
-                        # prediction_obs, _, memory,  = self.autoencoder(obs_tensor)
                         pred_action_logprobs, z_hat_t1, _, _, z_t, z_t1  = self.latentMDP(obs_tensor, action_tensor, next_obs_tensor)
 
                     if self.has_memory and i < self.sequence_length-1:
@@ -494,14 +491,9 @@ class PPO(Agent):
                         b_memories[i + 2] = next_memory.detach() # for MDP modelling
 
                     loss = self.lmdp_loss(pred_action_logprobs, action_tensor, obs_tensor, z_t, z_t1)                    
-                    # loss = self.autoencoder_loss_fn(prediction_obs, obs_tensor)
                     
                     batch_loss += loss
                 batch_loss = batch_loss/self.sequence_length
-        
-                # self.autoencoder_optimizer.zero_grad()
-                # batch_loss.backward()
-                # self.autoencoder_optimizer.step()
 
                 self.latentMDP_optimizer.zero_grad()
                 batch_loss.backward()

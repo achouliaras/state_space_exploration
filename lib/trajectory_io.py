@@ -3,7 +3,10 @@ import re
 import shutil
 import cv2
 import torch
+import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+import seaborn as sns
 import pandas as pd
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import QuantileTransformer
@@ -208,4 +211,92 @@ class TrajectoryProcessor(object):
         pass
         
         return X_reduced_2
-    
+
+class StateVisitation(object):
+    def __init__(self, work_dir, models_dir, unwrapped_env, mode='train'):
+        self.unwrapped_env = unwrapped_env
+        self.visit_counts = None
+        self.grid_info = None
+        self.work_dir = work_dir
+        self.models_dir = models_dir
+        if mode == 'train':
+            save_dir = f'{work_dir}/{models_dir}/state_visitation'
+        elif mode == 'pretrain':
+            save_dir = f'{work_dir}/{models_dir}/state_visitation_pretrain'
+        else:
+            raise ValueError(f"Unknown mode: {mode}. Use 'train' or 'pretrain'.")
+        self.save_dir = save_dir
+
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir, exist_ok=True)
+        else:
+            clear_folder_contents(save_dir)
+            os.makedirs(save_dir,exist_ok=True)
+
+    def get_env_view(self):
+        # Initialize a visitation counter (shape = grid size)
+        grid_width, grid_height = (self.unwrapped_env.width, self.unwrapped_env.height)
+        self.visit_counts = np.zeros([grid_width, grid_height], dtype=int)
+
+        # Store environment objects (lava, walls, etc.)
+        self.grid_info = np.zeros((grid_width, grid_height))
+
+        for x in range(grid_width):
+            for y in range(grid_height):
+                cell = self.unwrapped_env.grid.get(x, y)
+                if cell:
+                    if cell.type == "empty":
+                        self.grid_info[x, y] = 0
+                    elif cell.type == "wall":
+                        self.grid_info[x, y] = 1
+                    elif cell.type == "lava":
+                        self.grid_info[x, y] = 2
+                    elif cell.type == "goal":
+                        self.grid_info[x, y] = 3
+                    elif cell.type == "door":
+                        self.grid_info[x, y] = 4
+                    elif cell.type == "key":
+                        self.grid_info[x, y] = 5
+                    # elif cell.type == "ball":
+                    #     self.grid_info[x, y] = 6
+                    # elif cell.type == "box":
+                    #     self.grid_info[x, y] = 7
+                    # elif cell.type == "shelf":
+                    #     self.grid_info[x, y] = 8
+                    else:
+                        raise ValueError(f"Unknown cell type: {cell.type}")
+
+    def update(self):
+        # Get agent's position and update visit count
+        agent_pos = self.unwrapped_env.agent_pos
+        self.visit_counts[agent_pos[0], agent_pos[1]] += 1
+
+    def plot(self, global_step):
+        normalized_visits = self.visit_counts / self.visit_counts.max()
+
+        plt.figure(figsize=(10, 8))
+        # Overlay environment objects (walls, lava, goal)
+        sns.heatmap(
+            self.grid_info.T,
+            cmap=ListedColormap(["white", "grey", "orange", "green", "brown", "yellow"]),
+            alpha=1.0,  # Make semi-transparent
+            cbar=False,
+            linewidths=0.5,
+            linecolor="black",
+            annot=False,
+        )
+        sns.heatmap(
+            np.log1p(normalized_visits.T),  # Transpose to align with MiniGrid's (x, y) 
+            cmap="Blues", # Color map
+            alpha=0.6,  # Transparency
+            annot=False,      # Show counts
+            cbar=True,
+            vmin=0,
+            vmax=1,
+        )
+        plt.title("Agent State Visitation Frequency")
+        plt.xlabel("X Position")
+        plt.ylabel("Y Position")
+        plt.savefig(self.save_dir + f"/state_visitation_{global_step}.png")
+        plt.close()
+        print(f"State visitation plot saved at {self.save_dir}/state_visitation_{global_step}.png")

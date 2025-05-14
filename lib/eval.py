@@ -4,7 +4,7 @@ import torch
 import numpy as np
 from tqdm import tqdm
 
-def evaluate_agent(agent, cfg, logger, get_action = None):
+def evaluate_agent(agent, cfg, logger, get_action = None, seed=None):
     cfg.save_video=True
     env, cfg, obs_space = env_setup.make_env(cfg, cfg.render_mode)
     
@@ -17,7 +17,10 @@ def evaluate_agent(agent, cfg, logger, get_action = None):
     step = 0
     print('EVALUATION STARTS')
     for episode in tqdm(range(cfg.num_eval_episodes)):
-        obs, _ = env.reset()
+        if seed is None:
+            obs, _ = env.reset()
+        else:
+            obs, _ = env.reset(seed = seed)
         # obs, _, _, _, _ = env.step(1) # FIRE action for breakout
         terminated = False
         truncated = False

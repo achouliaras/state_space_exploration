@@ -101,17 +101,25 @@ class LatentMDPModel(torch.nn.Module):
 
         if self.action_type == 'Continuous':
             self.action_embedding = SimpleActor(input_dim=self.action_dim, 
-                                                output_dim=self.action_embedding_dim,
-                                                action_type=self.action_type,
-                                                hidden_depth=0,
-                                                hidden_dim=0
+                                                    output_dim=self.action_embedding_dim,
+                                                    action_type=self.action_type,
+                                                    hidden_depth=0,
+                                                    hidden_dim=0
                                                 )
-            self.inverse_model = self.create_actor(input_dim=self.obs_dim*2,
-                                                   output_dim=self.action_dim)
+            self.inverse_model = SimpleActor(input_dim=self.obs_dim*2, 
+                                                output_dim=self.action_dim,
+                                                action_type=self.action_type,
+                                                hidden_depth=2,
+                                                hidden_dim=64
+                                            )
         elif self.action_type == 'Discrete':
             self.action_embedding = nn.Embedding(action_dim,self.action_embedding_dim)
-            self.inverse_model = self.create_actor(input_dim=self.encoder.embedding_size*2,
-                                                   output_dim=self.action_dim)
+            self.inverse_model = SimpleActor(input_dim=self.encoder.embedding_size*2,
+                                                output_dim=self.action_dim,
+                                                action_type=self.action_type,
+                                                hidden_depth=1,
+                                                hidden_dim=64
+                                            )
 
         self.transition_model = self.create_actor(input_dim=self.encoder.embedding_size+self.action_embedding_dim,
                                                   output_dim=self.encoder.embedding_size)

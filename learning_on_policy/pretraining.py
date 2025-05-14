@@ -21,6 +21,7 @@ from lib.logger import Logger
 from lib import env_setup
 from lib import agent_setup
 from lib import utils
+from lib import trajectory_io
 from lib.eval import evaluate_agent
 from agent.pretraining.reward_models import IntrinsicRewardModel
 from agent.common.replay_buffers import TrajectoryBuffer
@@ -51,6 +52,8 @@ class Workspace(object):
         self.env.action_space.seed(cfg.seed)
         self.cfg = cfg
         
+        self.state_visitation = trajectory_io.StateVisitation(self.work_dir, self.cfg.models_dir, self.env.unwrapped, mode='pretrain')
+
         self.num_update_steps = self.cfg.agent.action_cfg.batch_size * 4  # 256
         self.batch_size =  int(self.num_update_steps) # x num_of_envs
         self.cfg.agent.action_cfg.batch_size = self.batch_size
@@ -160,8 +163,8 @@ class Workspace(object):
         total_time=0
         start_time = time.time()
 
-        obs, _ = self.env.reset(seed = self.cfg.seed)
-        # obs, _ = self.env.reset()
+        obs, _ = self.env.reset()
+        self.state_visitation.get_env_view()
         # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
         done = 0 
         if self.agent.has_memory:
@@ -205,6 +208,7 @@ class Workspace(object):
 
                 # execute step and log data
                 next_obs, reward, terminated, truncated, info = self.env.step(action)
+                self.state_visitation.update()
                 next_done = 1 if terminated or truncated else 0
                 next_memory = None
                 if self.agent.has_memory:
@@ -249,6 +253,9 @@ class Workspace(object):
                     done = 0 
                     if self.agent.has_memory:
                         memory = np.zeros(self.agent.memory_size)
+
+            if iteration % round(0.2*self.num_iterations)==0:
+                self.state_visitation.plot(self.global_step)
 
             # Calculate Intrinsic reward
             self.rewards = self.reward_model.calculate_intrinsic_reward([self.obs, self.actions, self.logprobs, self.values, self.rewards, self.dones, self.memories],
@@ -297,6 +304,8 @@ class Workspace(object):
         episode_time = time.time() - start_time
         total_time += episode_time
         
+        self.state_visitation.plot(self.global_step)  
+
         self.env.close()
         self.save_results()
         print('PRE-TRAINING FINISHED')

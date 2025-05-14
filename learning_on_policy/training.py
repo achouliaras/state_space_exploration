@@ -21,6 +21,7 @@ from lib.logger import Logger
 from lib import env_setup
 from lib import agent_setup
 from lib import utils
+from lib import trajectory_io
 from lib.eval import evaluate_agent
 
 
@@ -41,6 +42,8 @@ class Workspace(object):
         self.env.action_space.seed(cfg.seed)
         self.cfg = cfg
         
+        self.state_visitation = trajectory_io.StateVisitation(self.work_dir, self.cfg.models_dir, self.env.unwrapped)
+
         self.num_update_steps = self.cfg.agent.action_cfg.batch_size
         self.batch_size =  int(self.num_update_steps) # x num_of_envs
         self.cfg.agent.action_cfg.batch_size = self.batch_size
@@ -123,6 +126,7 @@ class Workspace(object):
         start_time = time.time()
 
         obs, _ = self.env.reset(seed = self.cfg.seed)
+        self.state_visitation.get_env_view()
         # obs, _ = self.env.reset()
         # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
         done = 0 
@@ -167,6 +171,7 @@ class Workspace(object):
 
                 # execute step and log data
                 next_obs, reward, terminated, truncated, info = self.env.step(action)
+                self.state_visitation.update()
                 next_done = terminated or truncated
                 next_memory = None
                 if self.agent.has_memory:
@@ -207,6 +212,8 @@ class Workspace(object):
                     if self.agent.has_memory:
                         memory = np.zeros(self.agent.memory_size)
 
+            if iteration % round(0.2*self.num_iterations)==0:
+                self.state_visitation.plot(self.global_step)
             # Training Update 
             # if global_step % self.num_update_steps == 0:
             # print('Actions: ',[i[0][0] for i in self.actions])
@@ -229,6 +236,7 @@ class Workspace(object):
             self.logger.log('train/episode_success', episode_success, global_step)
             self.logger.log('train/true_episode_success', episode_success, global_step)
 
+        self.state_visitation.plot(self.global_step)  
         # self.logger.dump(global_step, ty='train')
         self.env.close()
         print('TRAINING FINISHED')

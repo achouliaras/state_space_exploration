@@ -101,7 +101,7 @@ class IntrinsicRewardModel:
                 obs_novelty_score, num_novel = self.experience_memory.try_add(obs, memory)
             else:
                 num_novel=0
-                obs_novelty_score=torch.empty(self.batch_size)
+                obs_novelty_score=torch.empty(self.batch_size).to(self.device)
                 for i in range(0, self.batch_size, self.experience_memory.capacity):
                     obs_batch = obs[i:i+self.experience_memory.capacity]
                     memory_batch = memory[i:i+self.experience_memory.capacity]
