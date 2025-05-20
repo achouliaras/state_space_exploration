@@ -21,6 +21,7 @@ from lib.logger import Logger
 from lib import env_setup
 from lib import agent_setup
 from lib import utils
+from lib import trajectory_io
 from lib.eval import evaluate_agent
 
 
@@ -32,7 +33,6 @@ class Workspace(object):
         self.logger = Logger(
             cfg.models_dir,
             save_tb=cfg.log_save_tb,
-            seed=cfg.seed,
             log_frequency=cfg.log_frequency,
             agent=cfg.agent.name)
 
@@ -42,7 +42,9 @@ class Workspace(object):
         self.env.action_space.seed(cfg.seed)
         self.cfg = cfg
         
-        self.num_update_steps = self.cfg.agent.action_cfg.num_update_steps
+        self.state_visitation = trajectory_io.StateVisitation(self.work_dir, self.cfg.models_dir, self.env.unwrapped)
+
+        self.num_update_steps = self.cfg.agent.action_cfg.batch_size
         self.batch_size =  int(self.num_update_steps) # x num_of_envs
         self.cfg.agent.action_cfg.batch_size = self.batch_size
         self.num_iterations = int((self.cfg.num_train_steps+1) // self.batch_size)
@@ -53,7 +55,8 @@ class Workspace(object):
         if cfg.import_model:
             self.agent, _ = agent_setup.load_agent(self.work_dir, self.cfg, self.agent, mode=cfg.import_protocol)
             if cfg.freeze_protocol != 'NO': self.agent.freeze_models(mode=cfg.freeze_protocol)
-        # self.agent.reset_critic()
+            # self.agent.reset_actor()
+            # self.agent.reset_critic()
 
         # If you add parallel envs adjust size
         self.obs = np.zeros((self.num_update_steps, 1) + self.obs_space.shape)
@@ -73,6 +76,28 @@ class Workspace(object):
         self.episode=0
         self.interactions=0
         
+        self.logger.log('train/batch_reward', 0, 0)
+        self.logger.log('train_critic/loss', 0, 0)
+        self.logger.log('train_actor/loss', 0, 0)
+        self.logger.log('train_actor/entropy', 0, 0)
+        self.logger.log('train/gradnorm', 0, 0)
+        self.logger.log('train/batchvalue', 0, 0)
+        self.logger.log('train/explained_variance', 0, 0)
+        self.logger.log('train/learning_rate', 0, 0)
+        self.logger.log('train/approx_kl', 0, 0)
+        self.logger.log('train/old_approx_kl', 0, 0)
+        self.logger.log('train/clipfrac', 0, 0)
+        self.logger.log('train/episode', 0, 0)
+        self.logger.log('train/episode_reward', 0, 0)
+        self.logger.log('train/true_episode_reward', 0, 0)
+        self.logger.log('train/episode_length', cfg.max_episode_steps, 0)
+        self.logger.log('train/duration', 0, 0)
+        self.logger.log('train/total_duration', 0, 0)
+        if self.cfg.log_success:
+            self.logger.log('train/episode_success', 0, 0)
+            self.logger.log('train/true_episode_success', 0, 0)
+
+        self.logger.dump(0, ty='train')
         print('INIT COMPLETE')
         
     @property
@@ -101,6 +126,7 @@ class Workspace(object):
         start_time = time.time()
 
         obs, _ = self.env.reset(seed = self.cfg.seed)
+        self.state_visitation.get_env_view()
         # obs, _ = self.env.reset()
         # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
         done = 0 
@@ -145,6 +171,7 @@ class Workspace(object):
 
                 # execute step and log data
                 next_obs, reward, terminated, truncated, info = self.env.step(action)
+                self.state_visitation.update()
                 next_done = terminated or truncated
                 next_memory = None
                 if self.agent.has_memory:
@@ -185,6 +212,8 @@ class Workspace(object):
                     if self.agent.has_memory:
                         memory = np.zeros(self.agent.memory_size)
 
+            if iteration % round(0.2*self.num_iterations)==0:
+                self.state_visitation.plot(self.global_step)
             # Training Update 
             # if global_step % self.num_update_steps == 0:
             # print('Actions: ',[i[0][0] for i in self.actions])
@@ -207,6 +236,7 @@ class Workspace(object):
             self.logger.log('train/episode_success', episode_success, global_step)
             self.logger.log('train/true_episode_success', episode_success, global_step)
 
+        self.state_visitation.plot(self.global_step)  
         # self.logger.dump(global_step, ty='train')
         self.env.close()
         print('TRAINING FINISHED')
@@ -218,7 +248,10 @@ class Workspace(object):
         keys_to_save = ['step', 'episode']
         payload = {k: self.__dict__[k] for k in keys_to_save}
 
-        agent_setup.save_agent(self.agent, None, payload, self.work_dir, self.cfg, self.global_step)
+        agent_setup.save_agent(self.agent, None, payload, self.work_dir, 
+                               self.cfg, 
+                               self.global_step, 
+                               mode=self.cfg.export_protocol)
         print('SAVING COMPLETED')
         
 @hydra.main(version_base=None, config_path="../config", config_name='themis_train_on_policy')

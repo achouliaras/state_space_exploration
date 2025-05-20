@@ -1,8 +1,10 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
 from agent.common.actor_critic.critic_only import SimpleCritic
 from agent.common.actor_critic.actor_only import SimpleActor
 from agent.common.feature_extraction.encoder import Encoder
+from geomloss import SamplesLoss
 
 class InverseTransitionModel(torch.nn.Module):
     def __init__(self, obs_dim, action_dim, action_type, latent_dim, architecture, mode):
@@ -17,6 +19,10 @@ class InverseTransitionModel(torch.nn.Module):
         self.encoder = self.create_network()
         self.inverse_model = self.create_actor()
 
+    @property
+    def embedding_size(self):
+        return self.encoder.embedding_size
+    
     def create_network(self):
         # CNN, MLP, LSTM
         encoder = Encoder(obs_shape=self.obs_dim,
@@ -95,21 +101,65 @@ class LatentMDPModel(torch.nn.Module):
 
         if self.action_type == 'Continuous':
             self.action_embedding = SimpleActor(input_dim=self.action_dim, 
-                                                output_dim=self.action_embedding_dim,
-                                                action_type=self.action_type,
-                                                hidden_depth=0,
-                                                hidden_dim=0
+                                                    output_dim=self.action_embedding_dim,
+                                                    action_type=self.action_type,
+                                                    hidden_depth=0,
+                                                    hidden_dim=0
                                                 )
-            self.inverse_model = self.create_actor(input_dim=self.obs_dim*2,
-                                                   output_dim=self.action_dim)
+            self.inverse_model = SimpleActor(input_dim=self.obs_dim*2, 
+                                                output_dim=self.action_dim,
+                                                action_type=self.action_type,
+                                                hidden_depth=2,
+                                                hidden_dim=64
+                                            )
         elif self.action_type == 'Discrete':
             self.action_embedding = nn.Embedding(action_dim,self.action_embedding_dim)
-            self.inverse_model = self.create_actor(input_dim=self.encoder.embedding_size*2,
-                                                   output_dim=self.action_dim)
+            self.inverse_model = SimpleActor(input_dim=self.encoder.embedding_size*2,
+                                                output_dim=self.action_dim,
+                                                action_type=self.action_type,
+                                                hidden_depth=1,
+                                                hidden_dim=64
+                                            )
 
         self.transition_model = self.create_actor(input_dim=self.encoder.embedding_size+self.action_embedding_dim,
                                                   output_dim=self.encoder.embedding_size)
 
+        self.mse_loss = nn.MSELoss()
+        self.cross_entropy_loss = nn.CrossEntropyLoss()
+        self.eval_cross_entropy = nn.CrossEntropyLoss(reduction='none')
+        self.wasserstein_loss = SamplesLoss(loss='sinkhorn', p=2, blur=0.05)
+        self.l1_loss = nn.L1Loss()
+
+    def contrastive_loss(self, states, embeddings, temporal_window=1, temperature = 0.1):
+        # Encode states
+        embeddings = F.normalize(embeddings, p=2, dim=1)  # Normalize embeddings
+
+        # Positive pairs: states within temporal_window
+        pos_pairs = []
+        for t in range(len(states) - temporal_window):
+            pos_pairs.append((embeddings[t], embeddings[t + 1]))  # Consecutive states
+
+        # Negative pairs: states outside temporal_window
+        neg_pairs = []
+        for t in range(len(states)):
+            neg_indices = [i for i in range(len(states)) if abs(i - t) > temporal_window]
+            neg_pairs.extend([(embeddings[t], embeddings[i]) for i in neg_indices])
+
+        # Compute similarity for positive and negative pairs
+        pos_sim = torch.stack([torch.dot(z1, z2) for z1, z2 in pos_pairs]) / temperature
+        neg_sim = torch.stack([torch.dot(z1, z2) for z1, z2 in neg_pairs]) / temperature
+
+        # Contrastive loss (InfoNCE)
+        numerator = torch.exp(pos_sim)
+        denominator = numerator + torch.sum(torch.exp(neg_sim))
+        loss = -torch.log(numerator / denominator).mean()
+
+        return loss
+
+    @property
+    def embedding_size(self):
+        return self.encoder.embedding_size
+    
     def create_network(self):
         # CNN, MLP, LSTM
         encoder = Encoder(obs_shape=self.obs_dim,
@@ -173,7 +223,7 @@ class LatentMDPModel(torch.nn.Module):
         self.transition_model.train(training)
     
     def forward(self, obs, action, next_obs, memory = None, next_memory_mask = None):
-        a_t = self.action_embedding(action)
+        a_t = self.action_embedding(action).squeeze(1)
         z_t, memory = self.encoder(obs, memory)
         z_t1, next_memory = self.encoder(next_obs, memory*next_memory_mask)
         
@@ -188,3 +238,4 @@ class LatentMDPModel(torch.nn.Module):
     def log(self, logger, step):
         self.encoder.log(logger,step)
         self.inverse_model.log(logger,step)
+        self.transition_model.log(logger,step)

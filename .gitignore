@@ -168,6 +168,7 @@ cython_debug/
 *.egg-info
 *.lprof
 *.prof
+*.png
 
 .pytest_cache
 .cache
@@ -183,8 +184,7 @@ cython_debug/
 __pycache__/
 _build/
 
-eval.csv
-train.csv
+*.csv
 
 git_rewrite_commit_history.sh
 d:/
@@ -213,5 +213,3 @@ htmlcov
 junk
 src
 figures
-
-upload_code.sh

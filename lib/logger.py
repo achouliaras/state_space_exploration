@@ -12,14 +12,21 @@ from termcolor import colored
 COMMON_TRAIN_FORMAT = [
     ('episode', 'Eps', 'int'),
     ('step', 'Step', 'int'),
-    ('episode_reward', 'R', 'float'),
     ('true_episode_reward', 'TR', 'float'),
     ('episode_length', 'EL', 'int'), 
+    ('episode_reward', 'R', 'float'),
+    ('intrinsic_reward', 'Ri', 'float'),
+    ('local_reward', 'Rl', 'float'),
+    ('global_reward', 'Rg', 'float'),
     #('total_feedback', 'TF', 'int'),
     #('labeled_feedback', 'LR', 'int'),
     #('noisy_feedback', 'NR', 'int'),
     ('duration', 'D', 'time'),
     ('total_duration', 'TD', 'fulltime'),
+    ('encoder_loss', 'ELOSS', 'float'),
+    ('encoder_learning_rate', 'ELR', 'float'),
+    ('XPMem_usage', 'XP%', 'float'),
+    ('novel_states', 'NOV', 'int')
 ]
 
 COMMON_EVAL_FORMAT = [
@@ -149,7 +156,8 @@ class Logger(object):
     def __init__(self,
                  log_dir,
                  save_tb=False,
-                 seed = 1,
+                 train_file = 'train',
+                 eval_file = 'eval',
                  log_frequency=10000,
                  agent='SAC'):
         # log_dir = os.path.join(log_dir, f'{agent}_{experiment_name}')
@@ -169,9 +177,9 @@ class Logger(object):
         # each agent has specific output format for training
         assert agent in AGENT_TRAIN_FORMAT
         train_format = COMMON_TRAIN_FORMAT + AGENT_TRAIN_FORMAT[agent]
-        self._train_mg = MetersGroup(os.path.join(log_dir, 'train'),
+        self._train_mg = MetersGroup(os.path.join(log_dir, train_file),
                                      formating=train_format)
-        self._eval_mg = MetersGroup(os.path.join(log_dir, 'eval'),
+        self._eval_mg = MetersGroup(os.path.join(log_dir, eval_file),
                                     formating=COMMON_EVAL_FORMAT)
 
     def _should_log(self, step, log_frequency):
@@ -235,6 +243,7 @@ class Logger(object):
             self._train_mg.dump(step, 'train', save)
         else:
             raise f'invalid log type: {ty}'
+        
     def close(self):
         self._eval_mg.close()
         self._train_mg.close()

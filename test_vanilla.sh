@@ -23,19 +23,19 @@ pre_freeze_protocol=NO # NO, CNN-PART, CNN, ALL
 
 # Training
 num_train_steps=200100
-import_model=True
-import_protocol=OFFLINE # NORMAL, OFFLINE, ONLINE
+import_model=False
+import_protocol=NORMAL # NORMAL, OFFLINE, ONLINE
 freeze_protocol=NO # NO, CNN-PART, CNN, ALL
 
-test_name=LMDP_Offline #Vanilla, LMDP_Offline, AE_Offline, AEGIS
+test_name=Vanilla #Vanilla, LMDP_Offline, AE_Offline, AEGIS
 
 # 1 2 3 4 5 6 7 8 9 10
 for seed in 1 2 3 4 5 6 7 8 9 10; do
-       # Offline Training script
-       python -m learning_offline.pretraining device=$device \
-              domain=$domain env=$env render_mode=rgb_array max_episode_steps=100 seed=$seed architecture=$architecture \
-              offline_epochs=$offline_epochs export_protocol=$off_export_protocol \
-              num_seed_steps=$offline_num_seed_steps debug=True test=$test_name
+       # # Offline Training script
+       # python -m learning_offline.pretraining device=$device \
+       #        domain=$domain env=$env render_mode=rgb_array max_episode_steps=100 seed=$seed architecture=$architecture \
+       #        offline_epochs=$offline_epochs export_protocol=$off_export_protocol \
+       #        num_seed_steps=$offline_num_seed_steps debug=True test=$test_name
 
        # # Pretraining script
        # python -m learning_on_policy.pretraining device=$device \

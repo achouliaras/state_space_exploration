@@ -15,8 +15,9 @@ num_train_steps: 5e5 #1e6 for continuous
 deploy_mode: True
 
 import_model: True
-import_protocol: OFFLINE
-freeze_protocol: PART
+import_protocol: NORMAL
+export_protocol: NORMAL
+freeze_protocol: NO
 
 # unsup training
 gradient_update: 1

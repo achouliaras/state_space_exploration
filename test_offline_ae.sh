@@ -27,7 +27,7 @@ import_model=True
 import_protocol=OFFLINE # NORMAL, OFFLINE, ONLINE
 freeze_protocol=NO # NO, CNN-PART, CNN, ALL
 
-test_name=LMDP_Offline #Vanilla, LMDP_Offline, AE_Offline, AEGIS
+test_name=AE_Offline #Vanilla, LMDP_Offline, AE_Offline, AEGIS
 
 # 1 2 3 4 5 6 7 8 9 10
 for seed in 1 2 3 4 5 6 7 8 9 10; do

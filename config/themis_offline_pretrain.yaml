@@ -14,7 +14,8 @@ offline_epochs: 100
 # replay_buffer_capacity: 1e4 #1e6
 deploy_mode: False
 
-import_protocol: OFFLINE
+import_protocol: NORMAL
+export_protocol: OFFLINE
 freeze_protocol: None
 
 # unsup training

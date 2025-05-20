@@ -37,7 +37,6 @@ class Workspace(object):
         self.logger = Logger(
             cfg.models_dir,
             save_tb=cfg.log_save_tb,
-            seed=cfg.seed,
             log_frequency=cfg.log_frequency,
             agent=cfg.agent.name)
 
@@ -123,7 +122,7 @@ class Workspace(object):
             # Pre-Training Update 
             loss = self.agent.offline_update([self.obs, self.actions, self.rewards, self.dones], self.logger, self.num_seed_steps)
             
-            if epoch % 10 == 0:
+            if epoch % 5 == 0:
                 print(f"Epoch {epoch}, Loss: {loss:.6f}")
         print(f"Epoch {epoch}, Loss: {loss}")
 
@@ -145,7 +144,7 @@ class Workspace(object):
         agent_setup.save_agent(self.agent, None, payload, self.work_dir, 
                                self.cfg, 
                                self.cfg.offline_epochs,
-                               mode=self.cfg.import_protocol)
+                               mode=self.cfg.export_protocol)
         print('SAVING COMPLETED')
         
 @hydra.main(version_base=None, config_path="../config", config_name='themis_offline_pretrain')

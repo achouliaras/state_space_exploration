@@ -4,17 +4,23 @@ import torch
 import numpy as np
 from tqdm import tqdm
 
-def evaluate_agent(agent, cfg, logger):
+def evaluate_agent(agent, cfg, logger, get_action = None, seed=None):
     cfg.save_video=True
     env, cfg, obs_space = env_setup.make_env(cfg, cfg.render_mode)
     
+    if get_action == None:
+        get_action = agent.get_action
+
     average_episode_reward = 0
     average_true_episode_reward = 0
     success_rate = 0
     step = 0
     print('EVALUATION STARTS')
     for episode in tqdm(range(cfg.num_eval_episodes)):
-        obs, _ = env.reset()
+        if seed is None:
+            obs, _ = env.reset()
+        else:
+            obs, _ = env.reset(seed = seed)
         # obs, _, _, _, _ = env.step(1) # FIRE action for breakout
         terminated = False
         truncated = False
@@ -38,12 +44,12 @@ def evaluate_agent(agent, cfg, logger):
                     mask_tensor = torch.DoubleTensor(1-done).to(cfg.device).unsqueeze(0)
                     # print(memory_tensor.shape)
                     # print(mask_tensor.shape)
-                    action, logprob, _, value, memory = agent.get_action(obs=obs_tensor,
+                    action, logprob, _, value, memory = get_action(obs=obs_tensor,
                                                                         action=None,
                                                                         memory=memory_tensor * mask_tensor)
                     memory = memory.detach().cpu().numpy()[0]
                 else:
-                    action, logprob, _, value, _ = agent.get_action(torch.DoubleTensor(obs).to(cfg.device).unsqueeze(0))
+                    action, logprob, _, value, _ = get_action(torch.DoubleTensor(obs).to(cfg.device).unsqueeze(0))
             action = action.detach().cpu().numpy()[0]
 
             next_obs, reward, terminated, truncated, info = env.step(action)

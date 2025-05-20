@@ -2,7 +2,7 @@ import torch
 import os
 from agent.sac import SAC
 from agent.ppo import PPO
-from agent.common.replay_buffer import ReplayBuffer
+from agent.common.replay_buffers import ReplayBuffer
 
 def config_agent(cfg):
     # Setup Agent
@@ -124,7 +124,7 @@ def create_agent(cfg, obs_space=None):
                     architecture=cfg.architecture,
                     state_type=cfg.state_type, 
                     agent_cfg = cfg.agent,
-                    action_cfg = cfg.agent.action_cfg, 
+                    cfg = cfg, 
                     import_protocol = cfg.import_protocol,
                     deploy_mode = cfg.deploy_mode,
                     mode= cfg.mode,
@@ -140,6 +140,7 @@ def save_agent(agent, replay_buffer, payload, work_dir, cfg, global_frame, mode 
         print(f'Saving OFFLINE pretrained model to: {models_dir}')
     elif 'ONLINE' in mode:
         models_dir = work_dir / cfg.models_dir / 'online_models'
+        global_frame=cfg.num_seed_steps + cfg.num_unsup_steps
         print(f'Saving ONLINE pretrained model to: {models_dir}')
     else:
         models_dir = work_dir / cfg.models_dir / 'models'
