@@ -4,7 +4,7 @@ defaults:
     - agent: ppo
     
 # Experiment level parameters
-experiment_type: State-Vis-Pretraining
+experiment_type: Curriculum-Learning
 test: PEBBLE
 device: cpu
 offline_epochs: 10

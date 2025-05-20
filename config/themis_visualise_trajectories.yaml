@@ -4,7 +4,7 @@ defaults:
     - agent: sac
     
 # Experiment level parameters
-experiment_type: State-Vis-Pretraining
+experiment_type: Curriculum-Learning
 device: cpu
 cpu_id: 0
 deploy_mode: True

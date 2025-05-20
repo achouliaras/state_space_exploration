@@ -4,7 +4,7 @@ defaults:
     - agent: ppo
     
 # Experiment level parameters
-experiment_type: State-Vis-Pretraining
+experiment_type: Curriculum-Learning
 test: IMDP_Offline_NO_Freeze
 device: cpu
 num_seed_steps: 2e3 # Steps that the agent does random actions to generate data
