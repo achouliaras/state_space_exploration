@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from minigrid.core.mission import MissionSpace
 from minigrid.core.roomgrid import RoomGrid
+from typing import Any, Iterable, SupportsFloat, TypeVar
+from gymnasium.core import ActType, ObsType
 
 class UnlockEnv(RoomGrid):
     """
