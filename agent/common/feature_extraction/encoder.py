@@ -12,16 +12,23 @@ class Encoder(nn.Module):
 
         if 'CNN' in architecture:
             self.cnn = utils.cnn(self.obs_size, self.c, latent_dim, mode=mode)
-        else:
+        elif 'ResNet' in architecture:
+            self.cnn = utils.resnet(self.obs_size, self.c, latent_dim, mode=mode)
+        elif 'MLP' in architecture:
             # flatten
             self.image_embedding_size = 512
             self.mlp = utils.mlp(input_dim=np.array(obs_shape).prod(), 
                                  output_dim=512, 
                                  hidden_depth=1, 
                                  activation=nn.ReLU)
+        else:
+            raise ValueError(f"Unsupported architecture: {architecture}. Choose 'CNN', 'ResNet' or 'MLP'.")
 
         if 'LSTM' in architecture:
             self.memory_module = utils.lstm(self.image_embedding_size, self.semi_memory_size)
+            # self.memory_norm = nn.LayerNorm(self.semi_memory_size)
+        elif 'GRU' in architecture:
+            self.memory_module = utils.gru(self.image_embedding_size, self.semi_memory_size)
             # self.memory_norm = nn.LayerNorm(self.semi_memory_size)
 
         self.outputs = dict()
@@ -32,7 +39,12 @@ class Encoder(nn.Module):
     
     @property
     def memory_size(self):
-        return 2*self.semi_memory_size
+        if 'LSTM' in self.architecture:
+            return 2*self.semi_memory_size
+        elif 'GRU' in self.architecture:
+            return self.semi_memory_size
+        else:
+            return 0
 
     @property
     def semi_memory_size(self):
@@ -46,7 +58,7 @@ class Encoder(nn.Module):
         x = obs.permute(0, 1, 2, 3)
         
         # print(f'input: {x[0]}')
-        if 'CNN' in self.architecture:
+        if 'CNN' in self.architecture or 'ResNet' in self.architecture:
             # print('Obs shape ', x[0].shape)
             x = self.cnn(x)
         else:
@@ -65,6 +77,12 @@ class Encoder(nn.Module):
             # cell = self.memory_norm(cell)
             embedding = hidden
             memory = torch.cat((hidden, cell), dim=1)
+        elif 'GRU' in self.architecture:
+            hidden = memory
+            hidden = self.memory_module(x, hidden)
+            # hidden = self.memory_norm(hidden)
+            embedding = hidden
+            memory = hidden
         else:
             embedding = x
         
@@ -77,7 +95,7 @@ class Encoder(nn.Module):
         for k, v in self.outputs.items():
             logger.log_histogram(f'train_encoder/{k}_hist', v, step)
 
-        if 'CNN' in self.architecture:
+        if 'CNN' in self.architecture or 'ResNet' in self.architecture:
             for l, n in enumerate(self.cnn):
                 if type(n) == nn.Conv2d:
                     logger.log_param(f'train_encoder/conv{l}', n, step)
@@ -86,7 +104,7 @@ class Encoder(nn.Module):
                 if type(n) == nn.Linear:
                     logger.log_param(f'train_encoder/fc{l}', n, step)
 
-        if 'LSTM' in self.architecture:
+        if 'LSTM' in self.architecture or 'GRU' in self.architecture:
             # for i, m in enumerate(self.memory_module):
             #     if type(m) == nn.LSTMCell:
             # logger.log_param(f'train/lstm', self.memory_module, step)
@@ -99,7 +117,7 @@ class Decoder(nn.Module):
         self.architecture = architecture
         self.image_embedding_size = latent_dim
 
-        if 'CNN' in architecture:
+        if 'CNN' in architecture or 'ResNet' in architecture:
             self.de_cnn = utils.de_cnn(self.obs_size, self.c, latent_dim, mode=mode)
         else:
             # flatten
@@ -110,7 +128,7 @@ class Decoder(nn.Module):
                                  activation=nn.ReLU,
                                  output_mod=[nn.Sigmoid(),nn.Unflatten(1, obs_shape)])
 
-        # if 'LSTM' in architecture:
+        # if 'LSTM' in self.architecture or 'GRU' in self.architecture:
         #     self.memory_module = utils.lstm(self.image_embedding_size, self.semi_memory_size)
 
         self.outputs = dict()
@@ -128,7 +146,7 @@ class Decoder(nn.Module):
     #     return self.semi_memory_size
     
     def forward(self, embedding):
-        # if 'LSTM' in self.architecture:
+        # if 'LSTM' in self.architecture or 'GRU' in self.architecture:
         #     hidden = (memory[:, :self.semi_memory_size], memory[:, self.semi_memory_size:])
         #     hidden = self.memory_module(x, hidden)
         #     x = hidden[0]
@@ -138,7 +156,7 @@ class Decoder(nn.Module):
         
         x = embedding
         # print(f'input: {x[0]}')
-        if 'CNN' in self.architecture:
+        if 'CNN' in self.architecture or 'ResNet' in self.architecture:
             # print('Obs shape ', x[0].shape)
             z = self.de_cnn(x)
         else:
@@ -154,7 +172,7 @@ class Decoder(nn.Module):
         for k, v in self.outputs.items():
             logger.log_histogram(f'train_encoder/{k}_hist', v, step)
 
-        if 'CNN' in self.architecture:
+        if 'CNN' in self.architecture or 'ResNet' in self.architecture:
             for l, n in enumerate(self.cnn):
                 if type(n) == nn.Conv2d:
                     logger.log_param(f'train_encoder/conv{l}', n, step)
@@ -163,7 +181,7 @@ class Decoder(nn.Module):
                 if type(n) == nn.Linear:
                     logger.log_param(f'train_encoder/fc{l}', n, step)
 
-        # if 'LSTM' in self.architecture:
+        # if 'LSTM' in self.architecture or 'GRU' in self.architecture:
         #     # for i, m in enumerate(self.memory_module):
         #     #     if type(m) == nn.LSTMCell:
         #     # logger.log_param(f'train/lstm', self.memory_module, step)

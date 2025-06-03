@@ -81,12 +81,14 @@ class AverageMeter(object):
 
 
 class MetersGroup(object):
-    def __init__(self, file_name, formating):
+    def __init__(self, file_name, formating, print_logs=True, print_frequency=1):
         self._csv_file_name = self._prepare_file(file_name, 'csv')
         self._formating = formating
         self._meters = defaultdict(AverageMeter)
         self._csv_file = open(self._csv_file_name, 'w+')
         self._csv_writer = None
+        self.print_logs = print_logs
+        self.print_frequency = print_frequency
 
     def _prepare_file(self, prefix, suffix):
         file_name = f'{prefix}.{suffix}'
@@ -146,7 +148,9 @@ class MetersGroup(object):
             data = self._prime_meters()
             data['step'] = step
             self._dump_to_csv(data)
-            self._dump_to_console(data, prefix)
+            # 0 then 10k then 20k, etc.
+            if self.print_logs and step % self.print_frequency < 0.01 * self.print_frequency:
+                self._dump_to_console(data, prefix)
         self._meters.clear()
 
     def close(self):
@@ -158,6 +162,7 @@ class Logger(object):
                  save_tb=False,
                  train_file = 'train',
                  eval_file = 'eval',
+                 print_logs=True,
                  log_frequency=10000,
                  agent='SAC'):
         # log_dir = os.path.join(log_dir, f'{agent}_{experiment_name}')
@@ -178,7 +183,7 @@ class Logger(object):
         assert agent in AGENT_TRAIN_FORMAT
         train_format = COMMON_TRAIN_FORMAT + AGENT_TRAIN_FORMAT[agent]
         self._train_mg = MetersGroup(os.path.join(log_dir, train_file),
-                                     formating=train_format)
+                                     formating=train_format, print_logs=print_logs, print_frequency=log_frequency)
         self._eval_mg = MetersGroup(os.path.join(log_dir, eval_file),
                                     formating=COMMON_EVAL_FORMAT)
 

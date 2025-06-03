@@ -90,6 +90,11 @@ class CategoricalActor(nn.Module):
         if 'CNN' in architecture:
             self.cnn, self.flatten = utils.cnn(obs_space, obs_dim[0], mode=mode)
             obs_dim = self.flatten
+        elif 'ResNet' in architecture:
+            self.cnn, self.flatten = utils.resnet(obs_space, obs_dim[0], mode=mode)
+            obs_dim = self.flatten
+        else:
+            raise NotImplementedError(f'Architecture {architecture} not supported')
             
         self.trunk = utils.mlp(obs_dim, hidden_dim, action_dim, hidden_depth)
 
@@ -97,7 +102,7 @@ class CategoricalActor(nn.Module):
         #self.apply(utils.weight_init)
 
     def forward(self, obs):
-        if 'CNN' in self.architecture:
+        if 'CNN' in self.architecture or 'ResNet' in self.architecture:
             x = self.trunk(self.cnn(obs.permute(0, 1, 2, 3)))
         else:
             x = self.trunk(obs)
@@ -110,7 +115,7 @@ class CategoricalActor(nn.Module):
         for k, v in self.outputs.items():
             logger.log_histogram(f'train_actor/{k}_hist', v, step)
 
-        if 'CNN' in self.architecture:
+        if 'CNN' in self.architecture or 'ResNet' in self.architecture:
             for l, n in enumerate(self.cnn):
                 if type(n) == nn.Conv2d:
                     logger.log_param(f'train_actor/conv{l}', n, step)

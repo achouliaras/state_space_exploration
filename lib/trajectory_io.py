@@ -257,10 +257,10 @@ class StateVisitation(object):
                         self.grid_info[x, y] = 4
                     elif cell.type == "key":
                         self.grid_info[x, y] = 5
-                    # elif cell.type == "ball":
-                    #     self.grid_info[x, y] = 6
-                    # elif cell.type == "box":
-                    #     self.grid_info[x, y] = 7
+                    elif cell.type == "ball":
+                        self.grid_info[x, y] = 6
+                    elif cell.type == "box":
+                        self.grid_info[x, y] = 7
                     # elif cell.type == "shelf":
                     #     self.grid_info[x, y] = 8
                     else:
@@ -278,7 +278,7 @@ class StateVisitation(object):
         # Overlay environment objects (walls, lava, goal)
         sns.heatmap(
             self.grid_info.T,
-            cmap=ListedColormap(["white", "grey", "orange", "green", "brown", "yellow"]),
+            cmap=ListedColormap(["white", "grey", "orange", "green", "brown", "yellow", "red", "green"]),
             alpha=1.0,  # Make semi-transparent
             cbar=False,
             linewidths=0.5,

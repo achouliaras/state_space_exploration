@@ -29,6 +29,19 @@ def lstm(embedding_size, memory_size):
     # memory_module.bias_hh[memory_size:2*memory_size].data.fill_(1.0)
     return memory_module
 
+def gru(embedding_size, memory_size):
+    memory_module = nn.GRUCell(embedding_size, memory_size)
+    # for name, param in memory_module.named_parameters():
+    #     if "bias" in name:
+    #         nn.init.constant_(param, 0.0)
+    #     elif "weight" in name:
+    #         # nn.init.orthogonal_(param, 1.0)
+    #         nn.init.xavier_normal_(param,gain=0.1)
+    # # Set forget gate bias to 1 for longer memory
+    # memory_module.bias_ih[memory_size:2*memory_size].data.fill_(1.0)
+    # memory_module.bias_hh[memory_size:2*memory_size].data.fill_(1.0)
+    return memory_module
+
 def conv_output_size(input_size, kernel_size, stride=1, padding=0, dilation=1):
     """
     Calculate the output size of a convolutional layer.
@@ -120,11 +133,75 @@ def mlp(input_dim, output_dim, hidden_depth=0, hidden_dim=0, activation = nn.ReL
     if hidden_depth == 0:
         mods = [nn.Flatten(), layer_init(nn.Linear(input_dim, output_dim),std=w_init_std)]
     else:
-        mods = [nn.Flatten(), layer_init(nn.Linear(input_dim, hidden_dim),std=w_init_std), activation(inplace=True)]
+        mods = [nn.Flatten(), layer_init(nn.Linear(input_dim, hidden_dim)), activation(inplace=True)]
         for i in range(hidden_depth - 1):
-            mods += [layer_init(nn.Linear(hidden_dim, hidden_dim),std=w_init_std), activation(inplace=True)]
+            mods += [layer_init(nn.Linear(hidden_dim, hidden_dim)), activation(inplace=True)]
         mods.append(layer_init(nn.Linear(hidden_dim, output_dim),std=w_init_std))
     if output_mod is not None:
         mods.extend(output_mod)
     trunk = nn.Sequential(*mods)
     return trunk
+
+class ResidualBlock(nn.Module):
+    def __init__(self, channels, kernel_size=3, stride=1, padding=0):
+        """
+        A simple residual block with two convolutional layers and ReLU activations.
+        Args:
+            channels (int): Number of input and output channels.
+            kernel_size (int): Size of the convolutional kernel.
+            stride (int): Stride of the convolution.
+            padding (int): Padding added to both sides of the input.
+        """
+        super().__init__()
+        self.block = nn.Sequential(
+            nn.ReLU(),
+            layer_init(nn.Conv2d(channels, channels, kernel_size=kernel_size, stride=stride, padding=padding)),
+            nn.ReLU(),
+            layer_init(nn.Conv2d(channels, channels, kernel_size=kernel_size, stride=stride, padding=padding))
+        )
+
+    def forward(self, x):
+        print(f"Input shape: {x.shape}, Output shape: {self.block(x).shape}")
+        return x + self.block(x)
+
+def resnet(obs_shape, n_channels, embedding_size, mode=0):
+    w, h = obs_shape
+    channels = [[16,32,32],[8,16,16]]
+    kernel_size = [[8,4,3],[2,2,2]] # Parameterisation
+    stride = [[4,2,1],[1,1,1]]
+    padding =[[0,0,0],[0,0,0]]
+    resblock_params = [[3, 1, 0], [2, 1, 0]]  # kernel_size, stride, padding for residual blocks
+    channels  = channels[mode]
+    kernel_size=kernel_size[mode]
+    stride = stride[mode]
+    padding = padding[mode]
+    resblock_params = resblock_params[mode]
+
+    # Calculate the output size after convolutions
+    for i in range(3):
+        h = conv_output_size(h, kernel_size[i], stride[i], padding[i])
+        w = conv_output_size(w, kernel_size[i], stride[i], padding[i])
+    
+    # Flatten layer input size
+    flattened_size = h * w * channels[2]  # the number of output channels of the last conv layer
+    
+    feature_extractor = nn.Sequential(
+        layer_init(nn.Conv2d(n_channels, channels[0], kernel_size=kernel_size[0], stride=stride[0], padding=padding[0])),
+        ResidualBlock(channels[0], kernel_size=resblock_params[0], stride=resblock_params[1], padding=resblock_params[2]),
+        ResidualBlock(channels[0], kernel_size=resblock_params[0], stride=resblock_params[1], padding=resblock_params[2]),
+
+        layer_init(nn.Conv2d(channels[0], channels[1], kernel_size=kernel_size[1], stride=stride[1], padding=padding[1])),
+        ResidualBlock(channels[1], kernel_size=resblock_params[0], stride=resblock_params[1], padding=resblock_params[2]),
+        ResidualBlock(channels[1], kernel_size=resblock_params[0], stride=resblock_params[1], padding=resblock_params[2]),
+        
+        layer_init(nn.Conv2d(channels[1], channels[2], kernel_size=kernel_size[2], stride=stride[2], padding=padding[2])),
+        ResidualBlock(channels[2], kernel_size=resblock_params[0], stride=resblock_params[1], padding=resblock_params[2]),
+        ResidualBlock(channels[2], kernel_size=resblock_params[0], stride=resblock_params[1], padding=resblock_params[2]),
+        
+        nn.ReLU(),
+        nn.Flatten(),
+        layer_init(nn.Linear(flattened_size, embedding_size),std=0.01),
+        nn.ReLU(), 
+    )
+
+    return feature_extractor

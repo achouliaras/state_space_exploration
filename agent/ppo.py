@@ -49,7 +49,7 @@ class PPO(Agent):
         
         self.has_memory = False
         self.sequence_length = 1
-        if 'LSTM' in architecture: 
+        if 'LSTM' in self.architecture or 'GRU' in self.architecture:
             self.has_memory = True
             self.sequence_length = cfg.agent.action_cfg.sequence_length # CHECK
 
@@ -152,8 +152,7 @@ class PPO(Agent):
         self.latentMDP = self._create_LatentMDPModel()
         if reset_lr:
             self.latentMDP_optimizer = torch.optim.Adam(self.latentMDP.parameters(), lr=self.lr)
-            
-        
+                
     def train(self, training=True):
         self.training = training
         if self.deploy_mode:
@@ -221,7 +220,7 @@ class PPO(Agent):
     def freeze_models(self, mode = "NO"):
         print(mode)
         # Freeze feature extractor from encoder (cnn/mlp)
-        if 'CNN' in mode:
+        if 'CNN' in mode or 'ResNet' in mode:
             for name, p in self.acmodel.network.cnn.named_parameters():
                 p.requires_grad = False
                 if 'PART' in mode and '7' in name:
@@ -641,60 +640,20 @@ class PPO(Agent):
         logger.log('train/clipfrac', np.mean(self.clipfracs), step)
  
     def update(self, trajectory, next, logger, step):
-        obs, actions, logprobs, values, rewards, dones, memories = trajectory
-        next_obs, next_done, next_memory = next  
+        obs, actions, logprobs, values, rewards, dones, memories, next_obs, next_done, next_memory = self.to_tensor(trajectory, next)
 
-        obs = torch.DoubleTensor(obs).to(self.device)
-        actions = torch.DoubleTensor(actions).to(self.device)
-        logprobs = torch.DoubleTensor(logprobs).to(self.device)
-        values = torch.DoubleTensor(values).to(self.device)
-        rewards = torch.DoubleTensor(rewards).to(self.device)
-        dones = torch.DoubleTensor(dones).to(self.device)
-        if self.has_memory: 
-            memories = torch.DoubleTensor(memories).to(self.device)
-        
-        next_obs = torch.DoubleTensor(next_obs).to(self.device).unsqueeze(0)      
-        
         if self.has_memory:
-            next_memory = torch.DoubleTensor(next_memory).to(self.device).unsqueeze(0)
-            next_mask = torch.DoubleTensor([1-next_done]).to(self.device).unsqueeze(0)
+                next_mask = 1-next_done
 
-        # Calculate Advantages and Expected Returns
-        with torch.no_grad():
-            if self.has_memory:
-                _, next_value, _ = self.acmodel(next_obs, next_memory * next_mask)
-            else:
-                _, next_value, _ = self.acmodel(next_obs)
-            advantages = torch.zeros_like(rewards).to(self.device)
-            lastgaelam = 0
+        # Calculate Advantages and Expected Returns        
+        advantages, returns = self.calculate_advantage_and_returns(values, dones, rewards, next_obs, next_memory, next_done, next_mask)
 
-            for t in reversed(range(self.num_update_steps)):
-                if t == self.num_update_steps - 1:
-                    nextnonterminal = 1.0 - next_done
-                    nextvalues = next_value
-                else:
-                    nextnonterminal = 1.0 - dones[t + 1]
-                    nextvalues = values[t + 1]
-                delta = rewards[t] + self.discount * nextvalues * nextnonterminal - values[t]
-                advantages[t] = lastgaelam = delta + self.discount * self.gae_lambda * nextnonterminal * lastgaelam
-            returns = advantages + values
+        batch_size = self.num_update_steps
+        effective_sequence_length = self.sequence_length + 1
+        sequence_ids = list(range(0, batch_size-effective_sequence_length))
+        no_minibatches = max(int(len(sequence_ids) // self.minibatch_size), 1)
 
-        # flatten the batch
-        b_obs = obs.reshape((-1,) + tuple(self.obs_dim))
-        b_logprobs = logprobs.reshape(-1)
-        if self.action_type == 'Continuous':
-            b_actions = actions.reshape((-1,) + tuple(self.action_dim))
-        elif self.action_type == 'Discrete':
-            b_actions = actions.reshape((-1,1))
-        b_advantages = advantages.reshape(-1)
-        b_returns = returns.reshape(-1)
-        b_dones = dones.reshape(-1)
-        b_values = values.reshape(-1)
-        if self.has_memory:
-            b_memories = memories.reshape((-1,) + tuple(self.memory_size))
-        
         self.clipfracs = []
-
         for epoch in range(self.update_epochs):
             # print('Epoch ', epoch)
             print_flag = False
@@ -702,105 +661,93 @@ class PPO(Agent):
                 logger.log('train/batch_reward', rewards.mean(), step)
                 print_flag = True
             
-            suffled_minibatches = np.arange(0, self.num_update_steps, self.minibatch_size)
-            # np.random.shuffle(suffled_minibatches)
-            for minibatch in suffled_minibatches:
-                start = minibatch
-                end = minibatch + self.minibatch_size
-                # print(f'  Minibatch {start} - {end}')
+            for _ in range(no_minibatches):
+                # Suffle sequence ids
+                sample_ids = np.random.choice(sequence_ids, self.minibatch_size, replace=False)
+                
+                # Reshape data by sequence size first, batch size second
+                batch_ids = np.repeat(sample_ids, effective_sequence_length) + np.tile(np.arange(effective_sequence_length), len(sample_ids))
 
-                suffled_sequences = np.arange(start, end, self.sequence_length)
-                np.random.shuffle(suffled_sequences)
+                obs_t = obs[batch_ids]
+                actions_t = actions[batch_ids]
+                logprobs_t = logprobs[batch_ids]
+                values_t = values[batch_ids]
+                dones_t = dones[batch_ids]
+                memories_t = memories[batch_ids]
+                advantages_t = advantages[batch_ids]
+                returns_t = returns[batch_ids]
+                
+                # Flatten and reshape the data
+                b_obs, b_actions, b_logprobs, b_values, b_dones, b_memories, b_advantages, b_returns = self.reshape_batch(obs_t, actions_t, 
+                                                                        logprobs_t, values_t, dones_t, memories_t, advantages_t, returns_t, 
+                                                                        sequence_length=effective_sequence_length, 
+                                                                        minibatch_size=self.minibatch_size)
+                
+                batch_entropy = 0
+                batch_value = 0
+                batch_actor_loss = 0
+                batch_critic_loss = 0
+                batch_loss = 0
+        
+                for i in range(0, self.sequence_length):
+                    obs_tensor = b_obs[i]
+                    if self.has_memory:
+                        memory_tensor = b_memories[i]
+                        mask_tensor = (1-b_dones[i]).to(self.device)
 
-                for sequence in suffled_sequences: 
-                    # print(f'    Sequence: {sequence}')
+                        _, newlogprob, entropy, newvalue, memory = self.get_action(obs_tensor, b_actions.long()[i], memory_tensor * mask_tensor)
+                    else:
+                        _, newlogprob, entropy, newvalue, _ = self.get_action(obs_tensor, b_actions.long()[i])
+                    logratio = newlogprob - b_logprobs[i]
+                    ratio = logratio.exp()
 
-                    batch_entropy = 0
-                    batch_value = 0
-                    batch_actor_loss = 0
-                    batch_critic_loss = 0
-                    batch_loss = 0
+                    with torch.no_grad():
+                        # calculate approx_kl http://joschu.net/blog/kl-approx.html
+                        old_approx_kl = (-logratio).mean()
+                        approx_kl = ((ratio - 1) - logratio).mean()
+                        self.clipfracs += [((ratio - 1.0).abs() > self.clip_coef).float().mean().item()]
 
-                    for i in range(sequence, sequence+self.sequence_length):                  
-                        # print(f'      i: {i}')
+                    actor_loss, critic_loss = self.policy_and_value_update(b_advantages[i], b_values[i], b_returns[i], ratio, newvalue)
 
-                        obs_tensor = b_obs[i].unsqueeze(0)
-                        if self.has_memory:
-                            memory_tensor = b_memories[i].unsqueeze(0)
-                            mask_tensor = (1-b_dones[i]).to(self.device).unsqueeze(0)
-
-                            _, newlogprob, entropy, newvalue, memory = self.get_action(obs_tensor, b_actions.long()[i], memory_tensor * mask_tensor)
-                        else:
-                            _, newlogprob, entropy, newvalue, _ = self.get_action(obs_tensor, b_actions.long()[i])
-                        logratio = newlogprob - b_logprobs[i]
-                        ratio = logratio.exp()
-
-                        with torch.no_grad():
-                            # calculate approx_kl http://joschu.net/blog/kl-approx.html
-                            old_approx_kl = (-logratio).mean()
-                            approx_kl = ((ratio - 1) - logratio).mean()
-                            self.clipfracs += [((ratio - 1.0).abs() > self.clip_coef).float().mean().item()]
-
-                        mb_advantages = b_advantages[i]
-                        if self.norm_adv: # Use on vector envs
-                            mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
-
-                        # Policy loss
-                        pg_loss1 = -mb_advantages * ratio
-                        pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - self.clip_coef, 1 + self.clip_coef)
-                        actor_loss = torch.max(pg_loss1, pg_loss2).mean()
-
-                        # Value loss
-                        newvalue = newvalue.view(-1)
-                        if self.clip_vloss:
-                            v_loss_unclipped = (newvalue - b_returns[i]) ** 2
-                            v_clipped = b_values[i] + torch.clamp(newvalue - b_values[i], -self.clip_coef, self.clip_coef)
-                            v_loss_clipped = (v_clipped - b_returns[i]) ** 2
-                            v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
-                            critic_loss = 0.5 * v_loss_max.mean()
-                        else:
-                            critic_loss = 0.5 * ((newvalue - b_returns[i]) ** 2).mean()
-
-                        entropy_loss = entropy.mean()
-                        loss = actor_loss - self.ent_coef * entropy_loss + critic_loss * self.vf_coef
-
-                        # print(f'  i: {i}, Loss: {loss}, Actor Loss: {actor_loss}, Critic Loss: {critic_loss}, Entropy Loss: {entropy_loss}')
-                        # Update batch values
-                        batch_entropy += entropy.item()
-                        batch_value += newvalue.mean().item()
-                        batch_actor_loss += actor_loss.item()
-                        batch_critic_loss += critic_loss.item()
-                        batch_loss += loss
-
-                        if self.has_memory and i < sequence + self.sequence_length-1:
-                            b_memories[i + 1] = memory.detach()
-
-                    # print(f'Total Loss: {batch_loss}')
-
-                    # Update batch values
-                    batch_entropy /= self.sequence_length
-                    batch_value /= self.sequence_length
-                    batch_actor_loss /= self.sequence_length
-                    batch_critic_loss /= self.sequence_length
-                    batch_loss /= self.sequence_length
                     
-                    # print(f'Batch Loss: {batch_loss}')
-                    # Update actor-critic
-                    self.optimizer.zero_grad()
-                    batch_loss.backward()
-                    grad_norm = sum(p.grad.data.norm(2).item() ** 2 for p in self.acmodel.parameters() if p.requires_grad == True) ** 0.5
-                    torch.nn.utils.clip_grad_norm_(self.acmodel.parameters(), self.max_grad_norm)
-                    self.optimizer.step()
+                    entropy_loss = entropy.mean()
+                    loss = actor_loss - self.ent_coef * entropy_loss + critic_loss * self.vf_coef
 
-                    # Use action to take the suitable Q value
-                    if print_flag:
-                        logger.log('train_critic/loss', critic_loss, step)
-                        logger.log('train_actor/loss', actor_loss, step)
-                        logger.log('train_actor/entropy', entropy_loss, step)
-                        logger.log('train/gradnorm', grad_norm, step)
-                        logger.log('train/batchvalue', batch_value, step)
+                    # print(f'  i: {i}, Loss: {loss}, Actor Loss: {actor_loss}, Critic Loss: {critic_loss}, Entropy Loss: {entropy_loss}')
+                    # Update batch values
+                    batch_entropy += entropy_loss.item()
+                    batch_value += newvalue.mean().item()
+                    batch_actor_loss += actor_loss.item()
+                    batch_critic_loss += critic_loss.item()
+                    batch_loss += loss
 
-                    self.acmodel.log(logger, step)
+                    if self.has_memory and i < self.sequence_length-1:
+                        b_memories[i + 1] = memory.detach()
+
+                # Update batch values
+                batch_entropy /= self.sequence_length
+                batch_value /= self.sequence_length
+                batch_actor_loss /= self.sequence_length
+                batch_critic_loss /= self.sequence_length
+                batch_loss /= self.sequence_length
+                
+                # print(f'Batch Loss: {batch_loss}')
+                # Update actor-critic
+                self.optimizer.zero_grad()
+                batch_loss.backward()
+                grad_norm = sum(p.grad.data.norm(2).item() ** 2 for p in self.acmodel.parameters() if p.requires_grad == True) ** 0.5
+                torch.nn.utils.clip_grad_norm_(self.acmodel.parameters(), self.max_grad_norm)
+                self.optimizer.step()
+
+                # Use action to take the suitable Q value
+                if print_flag:
+                    logger.log('train_critic/loss', critic_loss, step)
+                    logger.log('train_actor/loss', actor_loss, step)
+                    logger.log('train_actor/entropy', entropy_loss, step)
+                    logger.log('train/gradnorm', grad_norm, step)
+                    logger.log('train/batchvalue', batch_value, step)
+
+                self.acmodel.log(logger, step)
                 
             if self.target_kl is not None and approx_kl > self.target_kl:
                 break

@@ -142,6 +142,10 @@ def save_agent(agent, replay_buffer, payload, work_dir, cfg, global_frame, mode 
         models_dir = work_dir / cfg.models_dir / 'online_models'
         global_frame=cfg.num_seed_steps + cfg.num_unsup_steps
         print(f'Saving ONLINE pretrained model to: {models_dir}')
+    elif "CURRICULUM" in mode:
+        models_dir = work_dir / cfg.models_dir / 'models'
+        global_frame=cfg.num_train_steps
+        print(f'Saving model for CURRICULUM LEARNING to: {models_dir}')
     else:
         models_dir = work_dir / cfg.models_dir / 'models'
     
@@ -157,7 +161,7 @@ def save_agent(agent, replay_buffer, payload, work_dir, cfg, global_frame, mode 
 
 def load_agent(work_dir, cfg, agent, replay_buffer=None, mode = 'NORMAL'):
     if "OFFLINE" in mode: 
-        models_dir = work_dir / cfg.models_dir / 'offline_models'
+        models_dir = work_dir / cfg.offline_models_dir
         if not models_dir.exists():
             print('NOT EXISTS:', models_dir)
             raise FileNotFoundError()
@@ -166,7 +170,7 @@ def load_agent(work_dir, cfg, agent, replay_buffer=None, mode = 'NORMAL'):
 
         agent.load(models_dir, global_frame, mode)
     elif "ONLINE" in mode:
-        models_dir = work_dir / cfg.models_dir / 'online_models'
+        models_dir = work_dir / cfg.online_models_dir
         if not models_dir.exists():
             print('NOT EXISTS:', models_dir)
             raise FileNotFoundError()
@@ -174,6 +178,18 @@ def load_agent(work_dir, cfg, agent, replay_buffer=None, mode = 'NORMAL'):
         global_frame = cfg.num_seed_steps + cfg.num_unsup_steps
 
         # snapshot = models_dir / f'snapshot_{global_frame}.pt'
+        if replay_buffer != None:
+            replay_buffer.load(models_dir, global_frame)
+
+        agent.load(models_dir, global_frame, mode)
+    elif "CURRICULUM" in mode:
+        models_dir = work_dir / cfg.curriculum_models_dir
+        if not models_dir.exists():
+            print('NOT EXISTS:', models_dir)
+            raise FileNotFoundError()
+        print(f'Loading model for CURRICULUM LEARNING from: {models_dir}')
+        global_frame = cfg.num_train_steps
+        
         if replay_buffer != None:
             replay_buffer.load(models_dir, global_frame)
 

@@ -61,6 +61,11 @@ class DoubleQCritic(nn.Module):
         if 'CNN' in self.architecture:
             self.cnn, self.flatten = utils.cnn(obs_space, obs_dim[0], mode = mode)
             obs_dim = self.flatten
+        elif 'ResNet' in self.architecture:
+            self.cnn, self.flatten = utils.resnet(obs_space, obs_dim[0], mode = mode)
+            obs_dim = self.flatten
+        else:
+            raise NotImplementedError(f'Architecture {self.architecture} not supported.')
 
         if self.action_type == 'Continuous':
             self.Q1 = utils.mlp(obs_dim + action_dim, hidden_dim, 1, hidden_depth)
@@ -73,7 +78,7 @@ class DoubleQCritic(nn.Module):
         #self.apply(utils.weight_init)
 
     def forward(self, obs, action=None):
-        if 'CNN' in self.architecture:
+        if 'CNN' in self.architecture or 'ResNet' in self.architecture:
             obs = self.cnn(obs.permute(0, 1, 2, 3))
         
         if self.action_type == 'Continuous':

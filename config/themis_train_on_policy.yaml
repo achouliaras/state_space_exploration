@@ -5,7 +5,7 @@ defaults:
     
 # Experiment level parameters
 experiment_type: Curriculum-Learning
-test: IMDP_Offline_NO_Freeze
+test: Vanilla
 device: cpu
 offline_epochs: 100
 num_seed_steps: 0 # Steps that the agent does random actions to fill the buffers 5e3 for continuous
@@ -17,6 +17,7 @@ deploy_mode: True
 import_model: True
 import_protocol: NORMAL
 export_protocol: NORMAL
+import_env: Null
 freeze_protocol: NO
 
 # unsup training
@@ -50,11 +51,11 @@ teacher_eps_equal: 0    # Probability of considering both segments equally good
 reward_schedule: 0
 
 # evaluation config
-eval_frequency: 10000 #100
+eval_frequency: 50000 #100
 num_eval_episodes: 10
 
 # logger
-log_frequency: 1000
+log_frequency: 10000
 log_save_tb: true
 
 # video recorder (Use only in evaluation)
@@ -75,7 +76,13 @@ xplain_state: False
 
 models_dir: ${output_dir}/${agent.name}_${test}/seed-${seed}
 
-offline_models_dir: ${models_dir}/
+offline_models_dir: ${models_dir}/offline_models
+online_models_dir: ${models_dir}/online_models
+
+# Input from curriculum experiments
+curriculum_models_dir: results/${experiment_type}/${domain}/${import_env}/${agent.name}_${test}/seed-${seed}/models
 
 # All output from experiments
 output_dir: results/${experiment_type}/${domain}/${env}
+
+

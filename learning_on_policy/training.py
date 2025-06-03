@@ -33,6 +33,7 @@ class Workspace(object):
         self.logger = Logger(
             cfg.models_dir,
             save_tb=cfg.log_save_tb,
+            print_logs=False,
             log_frequency=cfg.log_frequency,
             agent=cfg.agent.name)
 
@@ -47,7 +48,7 @@ class Workspace(object):
         self.num_update_steps = self.cfg.agent.action_cfg.batch_size
         self.batch_size =  int(self.num_update_steps) # x num_of_envs
         self.cfg.agent.action_cfg.batch_size = self.batch_size
-        self.num_iterations = int((self.cfg.num_train_steps+1) // self.batch_size)
+        self.num_iterations = int((self.cfg.num_train_steps+cfg.max_episode_steps) // self.batch_size)
         
         self.agent = agent_setup.create_agent(cfg)
         
@@ -206,7 +207,8 @@ class Workspace(object):
                     episode_length = 0
                     self.step = global_step
                     self.episode += 1
-                    obs, _ = self.env.reset()
+                    # obs, _ = self.env.reset()
+                    obs, _ = self.env.reset(seed = self.cfg.seed)
                     # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
                     done = 0 
                     if self.agent.has_memory:
@@ -218,9 +220,12 @@ class Workspace(object):
             # if global_step % self.num_update_steps == 0:
             # print('Actions: ',[i[0][0] for i in self.actions])
             # print([i[0] for i in self.rewards])
+            # update_time = time.time()
             self.agent.update([self.obs, self.actions, self.logprobs, self.values, self.rewards, self.dones, self.memories], 
                               [next_obs, next_done, next_memory], self.logger, global_step)
-            
+            # update_time = time.time() - update_time
+            # print(f'Update of {self.num_update_steps} steps took {update_time:.2f} seconds')
+
             if self.cfg.log_success:
                 episode_success = max(episode_success, terminated)
 
@@ -240,7 +245,7 @@ class Workspace(object):
         # self.logger.dump(global_step, ty='train')
         self.env.close()
         print('TRAINING FINISHED')
-        self.logger = evaluate_agent(self.agent, self.cfg, self.logger)
+        self.logger = evaluate_agent(self.agent, self.cfg, self.logger, seed=self.cfg.seed)
         self.logger.close()
 
     def save_results(self):
