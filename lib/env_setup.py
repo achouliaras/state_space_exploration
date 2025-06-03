@@ -100,7 +100,9 @@ def make_env(cfg, render_mode=None):
         #cfg.agent.actor_cfg = '${diag_gaussian_actor}' find another way to do this
     elif 'MiniGrid' in cfg.domain or 'BabyAI' in cfg.domain:
         import minigrid
+        from extra_minigrid_envs import register_all
 
+        register_all()
         # minigrid.register_minigrid_envs()
         # gym.pprint_registry()
         # Helper function to create MiniGrid environment
@@ -121,6 +123,7 @@ def make_env(cfg, render_mode=None):
 
         cfg.action_type = 'Discrete'
         cfg.state_type = 'pixel-grid'
+        # cfg.architecture = 'CNN-GRU' # CNN for image input, GRU for memory (Default best))
         cfg.latent_dim = 64
         cfg.mode = 1
         cfg.action_space = [1]
@@ -133,7 +136,7 @@ def make_env(cfg, render_mode=None):
         cfg.agent.obs_dim = obs_space.shape
         cfg.agent.action_dim = int(env.action_space.n)
         cfg.agent.action_cfg = cfg.agent.discrete_action
-        cfg.agent.action_cfg.batch_size = 64
+        cfg.agent.action_cfg.batch_size = 1024
         cfg.agent.action_range = [0,1]
     elif 'ALE' in cfg.domain:
         import ale_py
