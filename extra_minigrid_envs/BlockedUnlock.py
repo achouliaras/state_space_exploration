@@ -99,10 +99,11 @@ class BlockedUnlockEnv(RoomGrid):
         self.grid.set(pos[0] - 1, pos[1], Ball(color))
         
         # Add a key to unlock the door
-        self.add_object(0, 0, "key", door.color)
+        key, _ = self.add_object(0, 0, "key", door.color)
 
         self.place_agent(0, 0)
 
+        self.key = key
         self.door = door
         self.mission = f"open the door"
 

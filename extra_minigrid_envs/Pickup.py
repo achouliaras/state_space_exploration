@@ -97,6 +97,7 @@ class PickupEnv(RoomGrid):
 
         self.place_agent(0, 0)
 
+        self.door = door
         self.obj = obj
         self.mission = f"pick up the {obj.color} {obj.type}"
 

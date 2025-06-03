@@ -90,10 +90,12 @@ class UnlockPickupEnv(RoomGrid):
         # Make sure the two rooms are directly connected by a locked door
         door, _ = self.add_door(0, 0, 0, locked=True)
         # Add a key to unlock the door
-        self.add_object(0, 0, "key", door.color)
+        key, _ = self.add_object(0, 0, "key", door.color)
 
         self.place_agent(0, 0)
 
+        self.key = key
+        self.door = door
         self.obj = obj
         self.mission = f"pick up the {obj.color} {obj.type}"
 
