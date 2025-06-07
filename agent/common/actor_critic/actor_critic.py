@@ -38,8 +38,8 @@ class ACNModel(nn.Module):
             critic = SimpleCritic(input_dim=self.network.embedding_size,
                                   output_dim=1,
                                   action_type=self.action_type,
-                                  hidden_depth=0,
-                                  hidden_dim=0
+                                  hidden_depth=2,
+                                  hidden_dim=self.network.embedding_size
                                   )
         else:
             raise NotImplementedError
@@ -57,8 +57,8 @@ class ACNModel(nn.Module):
             actor = SimpleActor(input_dim=self.network.embedding_size,
                                 output_dim=self.action_dim,
                                 action_type=self.action_type,
-                                hidden_depth=0,
-                                hidden_dim=0
+                                hidden_depth=1,
+                                hidden_dim=self.network.embedding_size
                                 )
         else:
             raise NotImplementedError

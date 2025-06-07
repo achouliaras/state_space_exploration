@@ -54,7 +54,7 @@ class UnlockEnv(RoomGrid):
     """
 
     def __init__(self, max_steps: int | None = None, **kwargs):
-        room_size = 6
+        room_size = 5
         mission_space = MissionSpace(mission_func=self._gen_mission)
 
         if max_steps is None:
@@ -88,16 +88,26 @@ class UnlockEnv(RoomGrid):
         self.door = door
         self.mission = "open the door"
 
+    def _penalty(self) -> float:
+        """
+        Compute the reward to be given upon success
+        """
+        return - 0.8 * (1 / self.max_steps)
+    
     def step(self, action):
         obs, reward, terminated, truncated, info = super().step(action)
 
+        info["true_reward"] = 0
+        reward = self._penalty()
+
         if action == self.actions.toggle:
             if self.door.is_open:
-                reward = self._reward()
+                reward += 1 
                 terminated = True
+                info["true_reward"] = self._reward()
         elif action == self.actions.pickup:
             if self.first_time_key_pickup and self.carrying and self.carrying == self.key:
-                reward = 0.2
+                reward += 0.2
                 self.first_time_key_pickup = False
 
         return obs, reward, terminated, truncated, info

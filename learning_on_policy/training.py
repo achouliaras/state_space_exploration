@@ -24,6 +24,16 @@ from lib import utils
 from lib import trajectory_io
 from lib.eval import evaluate_agent
 
+ACTION_MAPPING = {
+    'LEFT': 0,
+    'RIGHT': 1,
+    'FORWARD': 2,
+    'PICKUP': 3,
+    'DROP': 4,
+    'TOGGLE': 5,
+    'DONE': 6
+}
+INVERSE_ACTION_MAPPING = {v: k for k, v in ACTION_MAPPING.items()}
 
 class Workspace(object):
     def __init__(self, cfg, work_dir):
@@ -71,6 +81,7 @@ class Workspace(object):
             self.memories = np.zeros((self.num_update_steps, 1) + self.agent.memory_size)
 
         # for logging
+        self.action_distribution = {INVERSE_ACTION_MAPPING[i]: 0 for i in range(self.cfg.agent.action_dim)}
         self.total_feedback = 0
         self.labeled_feedback = 0
         self.step = 0
@@ -92,6 +103,7 @@ class Workspace(object):
         self.logger.log('train/episode_reward', 0, 0)
         self.logger.log('train/true_episode_reward', 0, 0)
         self.logger.log('train/episode_length', cfg.max_episode_steps, 0)
+        self.logger.log_action_distribution('train/action', self.action_distribution, 0)
         self.logger.log('train/duration', 0, 0)
         self.logger.log('train/total_duration', 0, 0)
         if self.cfg.log_success:
@@ -119,6 +131,7 @@ class Workspace(object):
             episode_success = 0
         
         global_step = 0
+        episode_reward = 0
         true_episode_reward = 0
         episode_length = 0
         # store train returns of recent 10 episodes
@@ -126,9 +139,10 @@ class Workspace(object):
         total_time=0
         start_time = time.time()
 
+        # rng = np.random.RandomState(self.cfg.seed)
+        # obs, _ = self.env.reset(seed = rng.randint(0, 2**31 - 1))
         obs, _ = self.env.reset(seed = self.cfg.seed)
         self.state_visitation.get_env_view()
-        # obs, _ = self.env.reset()
         # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
         done = 0 
         if self.agent.has_memory:
@@ -182,14 +196,17 @@ class Workspace(object):
                 obs = next_obs
                 done = next_done
                 memory = next_memory
-                true_episode_reward += reward
-                
+                episode_reward += reward
+                true_episode_reward += info['true_reward']
+                self.action_distribution[INVERSE_ACTION_MAPPING[action]] += 1
+
                 if terminated or truncated:
                     episode_time = time.time() - start_time
                     total_time += episode_time
                     self.logger.log('train/episode', self.episode, global_step)
                     self.logger.log('train/episode_reward', episode_reward, global_step)
                     self.logger.log('train/true_episode_reward', true_episode_reward, global_step)
+                    self.logger.log_action_distribution('train/action', self.action_distribution, global_step)
                     self.logger.log('train/episode_length', episode_length, global_step)
                     self.logger.log('train/duration', episode_time, global_step)
                     self.logger.log('train/total_duration', total_time, global_step)
@@ -200,14 +217,15 @@ class Workspace(object):
                     self.logger.dump(global_step, ty='train')
                     start_time = time.time()
 
-                    # episode_reward = 0
+                    self.action_distribution = {INVERSE_ACTION_MAPPING[i]: 0 for i in range(self.cfg.agent.action_dim)}
                     if self.cfg.log_success:
                         episode_success = 0
+                    episode_reward = 0
                     true_episode_reward = 0
                     episode_length = 0
                     self.step = global_step
                     self.episode += 1
-                    # obs, _ = self.env.reset()
+                    # obs, _ = self.env.reset(seed = rng.randint(0, 2**31 - 1))
                     obs, _ = self.env.reset(seed = self.cfg.seed)
                     # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
                     done = 0 

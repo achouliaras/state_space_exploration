@@ -644,6 +644,8 @@ class PPO(Agent):
 
         if self.has_memory:
                 next_mask = 1-next_done
+        else:
+            next_mask = None
 
         # Calculate Advantages and Expected Returns        
         advantages, returns = self.calculate_advantage_and_returns(values, dones, rewards, next_obs, next_memory, next_done, next_mask)
@@ -673,10 +675,13 @@ class PPO(Agent):
                 logprobs_t = logprobs[batch_ids]
                 values_t = values[batch_ids]
                 dones_t = dones[batch_ids]
-                memories_t = memories[batch_ids]
                 advantages_t = advantages[batch_ids]
                 returns_t = returns[batch_ids]
-                
+                if self.has_memory:
+                    memories_t = memories[batch_ids]
+                else:
+                    memories_t = None
+
                 # Flatten and reshape the data
                 b_obs, b_actions, b_logprobs, b_values, b_dones, b_memories, b_advantages, b_returns = self.reshape_batch(obs_t, actions_t, 
                                                                         logprobs_t, values_t, dones_t, memories_t, advantages_t, returns_t, 

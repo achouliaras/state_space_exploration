@@ -53,7 +53,7 @@ class PickupKeyEnv(RoomGrid):
     """
 
     def __init__(self, max_steps: int | None = None, **kwargs):
-        room_size = 6
+        room_size = 5
         mission_space = MissionSpace(mission_func=self._gen_mission)
 
         if max_steps is None:
@@ -87,12 +87,22 @@ class PickupKeyEnv(RoomGrid):
         self.door = door
         self.mission = "pick up the key"
 
+    def _penalty(self) -> float:
+        """
+        Compute the reward to be given upon success
+        """
+        return - 0.8 * (1 / self.max_steps)
+    
     def step(self, action):
         obs, reward, terminated, truncated, info = super().step(action)
         
+        info["true_reward"] = 0
+        reward = self._penalty()
+
         if action == self.actions.pickup:
             if self.carrying and self.carrying == self.key:
-                reward = self._reward()
+                reward = 1 
                 terminated = True
+                info["true_reward"] = self._reward()
         
         return obs, reward, terminated, truncated, info

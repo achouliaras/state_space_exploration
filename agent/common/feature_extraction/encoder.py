@@ -66,9 +66,9 @@ class Encoder(nn.Module):
             # print('MLP')
         # print(f'output: {x[0]}')
         # x = x.reshape(x.shape[0], -1)
-
-        if torch.isnan(memory).any(): print(f"Input memory contains NaN!: {memory}")
-        if torch.isinf(memory).any(): print(f"Input memory contain Inf!: {memory}")
+        if memory is not None:
+            if torch.isnan(memory).any(): print(f"Input memory contains NaN!: {memory}")
+            if torch.isinf(memory).any(): print(f"Input memory contain Inf!: {memory}")
 
         if 'LSTM' in self.architecture:
             hidden = (memory[:, :self.semi_memory_size], memory[:, self.semi_memory_size:])

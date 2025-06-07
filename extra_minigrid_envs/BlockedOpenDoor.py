@@ -68,9 +68,9 @@ class BlockedOpenDoorEnv(RoomGrid):
             ordered_placeholders=[COLOR_NAMES, ["box", "key"]],
         )
 
-        room_size = 6
+        room_size = 5
         if max_steps is None:
-            max_steps = 16 * room_size**2
+            max_steps = 8 * room_size**2
 
         super().__init__(
             mission_space=mission_space,
@@ -104,12 +104,22 @@ class BlockedOpenDoorEnv(RoomGrid):
         self.door = door
         self.mission = f"open the door"
 
+    def _penalty(self) -> float:
+        """
+        Compute the reward to be given upon success
+        """
+        return - 0.8 * (1 / self.max_steps)
+    
     def step(self, action):
         obs, reward, terminated, truncated, info = super().step(action)
 
+        info["true_reward"] = 0
+        reward = self._penalty()
+
         if action == self.actions.toggle:
             if self.door.is_open:
-                reward = self._reward()
+                reward += 1
                 terminated = True
+                info["true_reward"] = self._reward()
 
         return obs, reward, terminated, truncated, info

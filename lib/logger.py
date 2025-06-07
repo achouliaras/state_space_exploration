@@ -130,6 +130,9 @@ class MetersGroup(object):
             return f'{key}: {value:04.1f} s'
         elif ty == 'fulltime':
             return f'{key}: {str(datetime.timedelta(seconds=value)).split(".")[0]} '
+        elif ty == 'dict':
+            if isinstance(value, dict):
+                return f''
         else:
             raise f'invalid format type: {ty}'
 
@@ -237,6 +240,14 @@ class Logger(object):
             return
         assert key.startswith('train') or key.startswith('eval')
         self._try_sw_log_histogram(key, histogram, step)
+
+    def log_action_distribution(self, key, action_distribution, step, log_frequency=1):
+        if not self._should_log(step, log_frequency):
+            return
+        assert key.startswith('train') or key.startswith('eval')
+        if isinstance(action_distribution, dict):
+            for k, v in action_distribution.items():
+                self._try_sw_log(f'{key}_{k}', v, step)
 
     def dump(self, step, save=True, ty=None):
         if ty is None:
