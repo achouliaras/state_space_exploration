@@ -3,6 +3,7 @@ from __future__ import annotations
 from minigrid.core.constants import COLOR_NAMES
 from minigrid.core.mission import MissionSpace
 from minigrid.core.roomgrid import RoomGrid
+from minigrid.core.world_object import Goal
 from minigrid.core.world_object import Ball
 from typing import Any, Iterable, SupportsFloat, TypeVar
 from gymnasium.core import ActType, ObsType
@@ -18,7 +19,7 @@ class PickupEnv(RoomGrid):
 
     ## Mission Space
 
-    "pick up the {color} {type}"
+    "get to the green goal square"
 
     {color} is the color of the box. Can be "red", "green", "blue", "purple",
     "yellow" or "grey".
@@ -58,7 +59,7 @@ class PickupEnv(RoomGrid):
 
     ## Registered Configurations
 
-    - `MiniGrid-BlockedUnlockPickup-v0`
+    - `MiniGrid-Pickup-v0`
 
     """
 
@@ -84,13 +85,16 @@ class PickupEnv(RoomGrid):
 
     @staticmethod
     def _gen_mission(color: str, obj_type: str):
-        return f"pick up the {color} {obj_type}"
+        return f"get to the green goal square"
 
     def _gen_grid(self, width, height):
         super()._gen_grid(width, height)
 
-        # Add a box to the room on the right
-        obj, _ = self.add_object(1, 0, kind="box")
+        # # Add a box to the room on the right
+        # obj, _ = self.add_object(1, 0, kind="box")
+        
+        # Place a goal in the room on the right
+        obj, _ = self.place_in_room(1, 0, Goal())
 
         # Make sure the two rooms are directly connected by a locked door
         door, pos = self.add_door(0, 0, 0, locked=False)
@@ -98,8 +102,8 @@ class PickupEnv(RoomGrid):
         self.place_agent(0, 0)
 
         self.door = door
-        self.obj = obj
-        self.mission = f"pick up the {obj.color} {obj.type}"
+        self.goal = obj
+        self.mission = f"get to the green goal square"
 
     def _penalty(self) -> float:
         """
@@ -113,11 +117,10 @@ class PickupEnv(RoomGrid):
         info["true_reward"] = 0
         reward = self._penalty()
 
-        if action == self.actions.pickup:
-            if self.carrying and self.carrying == self.obj:
-                reward += 1
-                terminated = True
-                info["true_reward"] = self._reward()
+        if self.agent_pos == self.goal.cur_pos:
+            reward += 1
+            terminated = True
+            info["true_reward"] = self._reward()
         elif action == self.actions.toggle:
             if self.door.is_open and self.first_time_door_open:
                 reward += 0.2

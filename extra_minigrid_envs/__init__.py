@@ -40,3 +40,7 @@ def register_all():
             id="MiniGrid-UnlockPickup-v0",
             entry_point="extra_minigrid_envs.UnlockPickup:UnlockPickupEnv",
         )
+    register(
+            id="MiniGrid-BlockedUnlockPickup-v0",
+            entry_point="extra_minigrid_envs.BlockedUnlockPickup:BlockedUnlockPickupEnv",
+        )

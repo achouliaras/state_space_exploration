@@ -5,18 +5,17 @@ from minigrid.core.mission import MissionSpace
 from minigrid.core.roomgrid import RoomGrid
 from minigrid.core.world_object import Goal
 from minigrid.core.world_object import Ball
-from typing import Any, Iterable, SupportsFloat, TypeVar
-from gymnasium.core import ActType, ObsType
 
-class BlockedPickupEnv(RoomGrid):
+
+class BlockedUnlockPickupEnv(RoomGrid):
     """
 
     ## Description
 
-    The agent has to pick up a box which is placed in another room, behind an
-    unlocked door. The door is also blocked by a ball which the agent has to move
-    before it can open the door. Hence, the agent has to learn to move the
-    ball, open the door and pick up the object in the other
+    The agent has to pick up a box which is placed in another room, behind a
+    locked door. The door is also blocked by a ball which the agent has to move
+    before it can unlock the door. Hence, the agent has to learn to move the
+    ball, pick up the key, open the door and pick up the object in the other
     room. This environment can be solved without relying on language.
 
     ## Mission Space
@@ -61,7 +60,7 @@ class BlockedPickupEnv(RoomGrid):
 
     ## Registered Configurations
 
-    - `MiniGrid-BlockedPickup-v0`
+    - `MiniGrid-BlockedUnlockPickup-v0`
 
     """
 
@@ -97,47 +96,26 @@ class BlockedPickupEnv(RoomGrid):
         # Place a goal in the room on the right
         obj, _ = self.place_in_room(1, 0, Goal())
         # Make sure the two rooms are directly connected by a locked door
-        door, pos = self.add_door(0, 0, 0, locked=False)
+        door, pos = self.add_door(0, 0, 0, locked=True)
         # Block the door with a ball
         color = self._rand_color()
         self.grid.set(pos[0] - 1, pos[1], Ball(color))
-        # # Add a key to unlock the door
-        # self.add_object(0, 0, "key", door.color)
+        # Add a key to unlock the door
+        self.add_object(0, 0, "key", door.color)
 
         self.place_agent(0, 0)
 
         self.goal = obj
         self.mission = f"get to the green goal square"
 
-    def _penalty(self) -> float:
-        """
-        Compute the reward to be given upon success
-        """
-        return - 0.8 * (1 / self.max_steps)
-    
     def step(self, action):
         obs, reward, terminated, truncated, info = super().step(action)
 
         info["true_reward"] = 0
-        reward = self._penalty()
 
         if self.agent_pos == self.goal.cur_pos:
-            reward += 1
-            terminated = True
             info["true_reward"] = self._reward()
-        elif action == self.actions.toggle:
-            if self.door.is_open and self.first_time_door_open:
-                reward += 0.2
-                self.first_time_door_open = False
+            reward = self._reward()
+            terminated = True
 
         return obs, reward, terminated, truncated, info
-    
-    def reset(
-        self,
-        *,
-        seed: int | None = None,
-        options: dict[str, Any] | None = None,
-    ) -> tuple[ObsType, dict[str, Any]]:
-        # Reset the first time door open flag
-        self.first_time_door_open = True
-        return super().reset(seed=seed)
