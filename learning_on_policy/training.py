@@ -24,6 +24,9 @@ from lib import utils
 from lib import trajectory_io
 from lib.eval import evaluate_agent
 
+import matplotlib.pyplot as plt
+
+
 ACTION_MAPPING = {
     'LEFT': 0,
     'RIGHT': 1,
@@ -58,7 +61,7 @@ class Workspace(object):
         self.num_update_steps = self.cfg.agent.action_cfg.batch_size
         self.batch_size =  int(self.num_update_steps) # x num_of_envs
         self.cfg.agent.action_cfg.batch_size = self.batch_size
-        self.num_iterations = int((self.cfg.num_train_steps+cfg.max_episode_steps) // self.batch_size)
+        self.num_iterations = int((self.cfg.num_train_steps) // self.batch_size) + 1
         
         self.agent = agent_setup.create_agent(cfg)
         
@@ -130,6 +133,9 @@ class Workspace(object):
         if self.cfg.log_success:
             episode_success = 0
         
+        
+        max_reward = 0  # Setup according to the environment
+
         global_step = 0
         episode_reward = 0
         true_episode_reward = 0
@@ -184,6 +190,21 @@ class Workspace(object):
                 self.logprobs[step] = logprob.detach().cpu().numpy()[0]
                 self.values[step] = value.detach().cpu().numpy()[0]
 
+                # print(obs.shape)
+                # plt.figure()
+                # if obs.ndim == 3:
+                #     if obs.shape[0] == 3:  # channel-first, e.g., (3, 27, 15)
+                #         plt.imshow(np.transpose(obs, (1, 2, 0)))
+                #     else:
+                #         plt.imshow(obs)
+                # elif obs.ndim == 2:
+                #     plt.imshow(obs, cmap='gray')
+                # else:
+                #     plt.plot(obs)
+                # plt.title(f'Observation at episode {self.episode}')
+                # plt.savefig(f'obs.png')  # Save the plot as PNG
+                # plt.pause(1)
+                
                 # execute step and log data
                 next_obs, reward, terminated, truncated, info = self.env.step(action)
                 self.state_visitation.update()
@@ -215,9 +236,14 @@ class Workspace(object):
                         self.logger.log('train/true_episode_success', episode_success, global_step)
 
                     self.logger.dump(global_step, ty='train')
-                    start_time = time.time()
 
                     self.action_distribution = {INVERSE_ACTION_MAPPING[i]: 0 for i in range(self.cfg.agent.action_dim)}
+                    if iteration > self.num_iterations * 0.75 and true_episode_reward > max_reward:
+                        max_reward = true_episode_reward
+                        print(f'New max reward: {max_reward} at step {self.global_step}')
+                        self.save_results()
+                    
+                    start_time = time.time()   
                     if self.cfg.log_success:
                         episode_success = 0
                     episode_reward = 0
@@ -227,7 +253,7 @@ class Workspace(object):
                     self.episode += 1
                     # obs, _ = self.env.reset(seed = rng.randint(0, 2**31 - 1))
                     obs, _ = self.env.reset(seed = self.cfg.seed)
-                    # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
+                    # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout                    
                     done = 0 
                     if self.agent.has_memory:
                         memory = np.zeros(self.agent.memory_size)
@@ -259,10 +285,15 @@ class Workspace(object):
             self.logger.log('train/episode_success', episode_success, global_step)
             self.logger.log('train/true_episode_success', episode_success, global_step)
 
+        if true_episode_reward > max_reward:
+            max_reward = true_episode_reward
+            print(f'New max reward: {max_reward} at step {self.global_step}')
+            self.save_results()
         self.state_visitation.plot(self.global_step)  
         # self.logger.dump(global_step, ty='train')
         self.env.close()
         print('TRAINING FINISHED')
+        
         self.logger = evaluate_agent(self.agent, self.cfg, self.logger, seed=self.cfg.seed)
         self.logger.close()
 
@@ -273,7 +304,7 @@ class Workspace(object):
 
         agent_setup.save_agent(self.agent, None, payload, self.work_dir, 
                                self.cfg, 
-                               self.global_step, 
+                               self.cfg.num_train_steps, 
                                mode=self.cfg.export_protocol)
         print('SAVING COMPLETED')
         
@@ -298,7 +329,6 @@ def main(cfg : DictConfig):
     
     print(f'Workspace: {work_dir}\nSEED {cfg.seed}')
     workspace.run()
-    workspace.save_results()
     print(f'Experiment with SEED {cfg.seed} finished')
 
 if __name__ == '__main__':

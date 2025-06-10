@@ -9,6 +9,7 @@ from agent.pretraining import pebble
 from agent.common.feature_extraction.autoencoder import AutoEncoder
 from agent.common.transition_model import LatentMDPModel
 from agent.common.actor_critic.actor_critic import ACModel, ACNModel
+from torchsummary import summary
 
 class PPO(Agent):
     """PPO algorithm."""
@@ -60,6 +61,7 @@ class PPO(Agent):
         if deploy_mode:
             self.acmodel = self._create_ACNModel()
             self.optimizer = torch.optim.Adam(self.acmodel.parameters(), lr=self.lr, eps=1e-08) # CHECK
+            # print(self.acmodel)
         else:
             # self.autoencoder = self._create_AutoEncoder()
             # self.autoencoder_optimizer = torch.optim.Adam(self.autoencoder.parameters(), lr=self.lr) # CHECK     
@@ -68,7 +70,8 @@ class PPO(Agent):
             # pre-training
             self.latentMDP = self._create_LatentMDPModel()
             self.latentMDP_optimizer = torch.optim.Adam(self.latentMDP.parameters(), lr=self.lr) # CHECK
-            
+            # print(self.latentMDP)
+
             if 'encoder_update_epochs' in cfg:
                 self.encoder_update_epochs = cfg.encoder_update_epochs
                 # online pretraining

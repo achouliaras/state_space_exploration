@@ -113,10 +113,11 @@ def make_env(cfg, render_mode=None):
             env = gym.make(id=id, render_mode=render_mode) 
         
         # env = minigrid.wrappers.FullyObsWrapper(env)
+        env = minigrid.wrappers.RGBImgObsWrapper(env, tile_size=3)
         env = minigrid.wrappers.ImgObsWrapper(env)
-        env = gym.wrappers.NormalizeObservation(env)
-        # env = NormalizeObservationWrapper(env, std=255.0)
-        env = ReshapeObservationWrapper(env)
+        # env = gym.wrappers.NormalizeObservation(env)
+        env = NormalizeObservationWrapper(env, std=255.0)
+        env = ReshapeObservationWrapper(env, reverse_width_height=False) # Reorder first 2 dimensions to match frame shape
         env = gym.wrappers.RecordEpisodeStatistics(env, buffer_length=cfg.max_episode_steps)
         if cfg.save_video:
             env, cfg = record_video_wrap(env, cfg)
@@ -134,7 +135,7 @@ def make_env(cfg, render_mode=None):
         # cfg.agent.obs_dim = obs_space_shape # Test
         cfg.agent.obs_shape = obs_space.shape
         cfg.agent.obs_dim = obs_space.shape
-        cfg.agent.action_dim = int(env.action_space.n)
+        cfg.agent.action_dim = int(env.action_space.n)-1 # -1 for the 'done' action
         cfg.agent.action_cfg = cfg.agent.discrete_action
         cfg.agent.action_cfg.batch_size = 1024
         cfg.agent.action_range = [0,1]
@@ -286,22 +287,37 @@ def make_env(cfg, render_mode=None):
     return env, cfg, obs_space
 
 class ReshapeObservationWrapper(gym.ObservationWrapper):
-    def __init__(self, env):
+    def __init__(self, env, reverse_width_height=False):
         super().__init__(env)
+        self.reverse_width_height = reverse_width_height
         # Update the observation space to reflect the new shape
         obs_shape = self.observation_space.shape
-        new_shape = (obs_shape[2], obs_shape[0], obs_shape[1])  # C, W, H
-        # print(self.observation_space.low.shape)
-        self.observation_space = gym.spaces.Box(
-            low=self.observation_space.low.transpose(2, 0, 1),
-            high=self.observation_space.high.transpose(2, 0, 1),
-            shape=new_shape,
-            dtype=self.observation_space.dtype
-        )
+        if reverse_width_height:
+            new_shape = (obs_shape[2], obs_shape[1], obs_shape[0])  # C, H, W
+            # print(self.observation_space.low.shape)
+            self.observation_space = gym.spaces.Box(
+                low=self.observation_space.low.transpose(2, 1, 0),
+                high=self.observation_space.high.transpose(2, 1, 0),
+                shape=new_shape,
+                dtype=self.observation_space.dtype
+            )
+        else:
+            new_shape = (obs_shape[2], obs_shape[0], obs_shape[1])  # C, W, H
+            # print(self.observation_space.low.shape)
+            self.observation_space = gym.spaces.Box(
+                low=self.observation_space.low.transpose(2, 0, 1),
+                high=self.observation_space.high.transpose(2, 0, 1),
+                shape=new_shape,
+                dtype=self.observation_space.dtype
+            )
 
     def observation(self, observation):
-        # Transpose observation from (W, H, C) to (C, W, H)
-        observation = np.transpose(observation, (2, 0, 1))
+        if self.reverse_width_height:
+            # Transpose observation from (H, W, C) to (C, H, W)
+            observation = np.transpose(observation, (2, 1, 0))
+        else:
+            # Transpose observation from (W, H, C) to (C, W, H)
+            observation = np.transpose(observation, (2, 0, 1))
         return observation
 
 class NormalizeObservationWrapper(gym.ObservationWrapper):

@@ -225,7 +225,8 @@ class LatentMDPModel(torch.nn.Module):
     def forward(self, obs, action, next_obs, memory = None, next_memory_mask = None):
         a_t = self.action_embedding(action).squeeze(1)
         z_t, memory = self.encoder(obs, memory)
-        z_t1, next_memory = self.encoder(next_obs, memory*next_memory_mask)
+        next_memory = memory if next_memory_mask is None else memory * next_memory_mask
+        z_t1, next_memory = self.encoder(next_obs, next_memory)
         
         i = torch.cat((z_t, z_t1), dim=1)
         t = torch.cat((z_t, a_t), dim=1)

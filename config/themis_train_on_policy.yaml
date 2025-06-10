@@ -80,7 +80,7 @@ offline_models_dir: ${models_dir}/offline_models
 online_models_dir: ${models_dir}/online_models
 
 # Input from curriculum experiments
-curriculum_models_dir: results/${experiment_type}/${domain}/${import_env}/${agent.name}_${test}/seed-${seed}/models
+curriculum_models_dir: results/${experiment_type}/${domain}/${import_env}/${agent.name}_${test}/seed-${seed}/
 
 # All output from experiments
 output_dir: results/${experiment_type}/${domain}/${env}

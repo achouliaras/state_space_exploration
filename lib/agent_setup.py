@@ -160,13 +160,22 @@ def save_agent(agent, replay_buffer, payload, work_dir, cfg, global_frame, mode 
     torch.save(payload, snapshot, pickle_protocol=4)
 
 def load_agent(work_dir, cfg, agent, replay_buffer=None, mode = 'NORMAL'):
-    if "OFFLINE" in mode: 
-        models_dir = work_dir / cfg.offline_models_dir
+    if "CURRICULUM" in mode:
+        models_dir = work_dir / cfg.curriculum_models_dir / 'models'
+        if "OFFLINE" in mode:
+            models_dir = work_dir / cfg.curriculum_models_dir / 'offline_models'
         if not models_dir.exists():
             print('NOT EXISTS:', models_dir)
             raise FileNotFoundError()
-        print(f'Loading OFFLINE pretrained model from: {models_dir}')
-        global_frame=cfg.offline_epochs
+        if "OFFLINE" in mode:
+            print(f'Loading OFFLINE pretrained model for from: {models_dir}')
+            global_frame = cfg.offline_epochs
+        else:
+            print(f'Loading model for CURRICULUM LEARNING from: {models_dir}')
+            global_frame = cfg.num_train_steps
+        
+        if replay_buffer != None:
+            replay_buffer.load(models_dir, global_frame)
 
         agent.load(models_dir, global_frame, mode)
     elif "ONLINE" in mode:
@@ -182,16 +191,13 @@ def load_agent(work_dir, cfg, agent, replay_buffer=None, mode = 'NORMAL'):
             replay_buffer.load(models_dir, global_frame)
 
         agent.load(models_dir, global_frame, mode)
-    elif "CURRICULUM" in mode:
-        models_dir = work_dir / cfg.curriculum_models_dir
+    elif "OFFLINE" in mode: 
+        models_dir = work_dir / cfg.offline_models_dir
         if not models_dir.exists():
             print('NOT EXISTS:', models_dir)
             raise FileNotFoundError()
-        print(f'Loading model for CURRICULUM LEARNING from: {models_dir}')
-        global_frame = cfg.num_train_steps
-        
-        if replay_buffer != None:
-            replay_buffer.load(models_dir, global_frame)
+        print(f'Loading OFFLINE pretrained model from: {models_dir}')
+        global_frame=cfg.offline_epochs
 
         agent.load(models_dir, global_frame, mode)
     else:
