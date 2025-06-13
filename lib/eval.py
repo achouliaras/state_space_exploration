@@ -39,9 +39,9 @@ def evaluate_agent(agent, cfg, logger, get_action = None, seed=None):
             action = env.action_space.sample()
             with agent_setup.eval_mode(agent):
                 if agent.has_memory:
-                    obs_tensor = torch.DoubleTensor(obs).to(cfg.device).unsqueeze(0)
-                    memory_tensor = torch.DoubleTensor(memory).to(cfg.device).unsqueeze(0)
-                    mask_tensor = torch.DoubleTensor(1-done).to(cfg.device).unsqueeze(0)
+                    obs_tensor = torch.FloatTensor(obs).to(cfg.device).unsqueeze(0)
+                    memory_tensor = torch.FloatTensor(memory).to(cfg.device).unsqueeze(0)
+                    mask_tensor = torch.FloatTensor(1-done).to(cfg.device).unsqueeze(0)
                     # print(memory_tensor.shape)
                     # print(mask_tensor.shape)
                     action, logprob, _, value, memory = get_action(obs=obs_tensor,
@@ -49,7 +49,7 @@ def evaluate_agent(agent, cfg, logger, get_action = None, seed=None):
                                                                         memory=memory_tensor * mask_tensor)
                     memory = memory.detach().cpu().numpy()[0]
                 else:
-                    action, logprob, _, value, _ = get_action(torch.DoubleTensor(obs).to(cfg.device).unsqueeze(0))
+                    action, logprob, _, value, _ = get_action(torch.FloatTensor(obs).to(cfg.device).unsqueeze(0))
             action = action.detach().cpu().numpy()[0]
 
             next_obs, reward, terminated, truncated, info = env.step(action)

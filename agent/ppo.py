@@ -60,7 +60,13 @@ class PPO(Agent):
         # online training
         if deploy_mode:
             self.acmodel = self._create_ACNModel()
-            self.optimizer = torch.optim.Adam(self.acmodel.parameters(), lr=self.lr, eps=1e-08) # CHECK
+            if 'LSTM' in self.architecture or 'GRU' in self.architecture:
+                self.optimizer = torch.optim.Adam([{'params': self.acmodel.network.cnn.parameters(), 'lr':self.lr, 'eps':1e-08},
+                                                {'params': self.acmodel.network.memory_module.parameters(), 'lr': 1e-4, 'eps':1e-08},
+                                                {'params': self.acmodel.actor.parameters(), 'lr':self.lr, 'eps':1e-08},
+                                                {'params': self.acmodel.critic.parameters(), 'lr':self.lr, 'eps':1e-08}])
+            else:
+                self.optimizer = torch.optim.Adam(self.acmodel.parameters(), lr=self.lr, eps=1e-08)
             # print(self.acmodel)
         else:
             # self.autoencoder = self._create_AutoEncoder()
@@ -69,7 +75,13 @@ class PPO(Agent):
 
             # pre-training
             self.latentMDP = self._create_LatentMDPModel()
-            self.latentMDP_optimizer = torch.optim.Adam(self.latentMDP.parameters(), lr=self.lr) # CHECK
+            if 'LSTM' in self.architecture or 'GRU' in self.architecture:
+                self.latentMDP_optimizer = torch.optim.Adam([{'params': self.latentMDP.encoder.cnn.parameters(), 'lr':self.lr, 'eps':1e-08},
+                                                {'params': self.latentMDP.encoder.memory_module.parameters(), 'lr': 1e-4, 'eps':1e-08},
+                                                {'params': self.latentMDP.transition.parameters(), 'lr':self.lr, 'eps':1e-08},
+                                                {'params': self.latentMDP.action_predictor.parameters(), 'lr':self.lr, 'eps':1e-08},])
+            else:
+                self.latentMDP_optimizer = torch.optim.Adam(self.latentMDP.parameters(), lr=self.lr, eps=1e-08)
             # print(self.latentMDP)
 
             if 'encoder_update_epochs' in cfg:
@@ -77,7 +89,7 @@ class PPO(Agent):
                 # online pretraining
                 # AC model for policy learning
                 self.acmodel = self._create_ACModel()
-                self.optimizer = torch.optim.Adam(self.acmodel.parameters(), lr=self.lr, eps=1e-08) # CHECK
+                self.optimizer = torch.optim.Adam(self.acmodel.parameters(), lr=self.lr, eps=1e-08)
 
         # change mode
         self.train()
@@ -86,7 +98,7 @@ class PPO(Agent):
         acnmodel = ACModel(obs_dim=self.latentMDP.embedding_size,
                           action_dim=self.action_dim,
                           action_type=self.action_type)
-        acnmodel.double()
+        # acnmodel.double()
         acnmodel.to(self.device)
         return acnmodel
 
@@ -97,7 +109,7 @@ class PPO(Agent):
                           latent_dim = self.latent_dim,
                           architecture=self.architecture,
                           mode=self.mode)
-        acmodel.double()
+        # acmodel.double()
         acmodel.to(self.device)
         return acmodel
     
@@ -108,7 +120,7 @@ class PPO(Agent):
                                     latent_dim = self.latent_dim,
                                     architecture=self.architecture,
                                     mode=self.mode)
-        model.double()
+        # model.double()
         model.to(self.device)
         return model
     
@@ -119,7 +131,7 @@ class PPO(Agent):
                                 latent_dim = self.latent_dim,
                                 architecture=self.architecture,
                                 mode=self.mode)
-        autoencoder.double()
+        # autoencoder.double()
         autoencoder.to(self.device)
         return autoencoder
     
@@ -134,19 +146,19 @@ class PPO(Agent):
     def reset_actor(self):
         # reset actor and critic
         self.acmodel.reset_actor()
-        self.acmodel.double()
+        # self.acmodel.double()
         self.acmodel.to(self.device)
     
     def reset_critic(self):
         # reset actor and critic
         self.acmodel.reset_critic()
-        self.acmodel.double()
+        # self.acmodel.double()
         self.acmodel.to(self.device)
 
     def reset_network(self):
         # reset network
         self.acmodel.reset_network()
-        self.acmodel.double()
+        # self.acmodel.double()
         self.acmodel.to(self.device)
     
     def reset_lmdp_network(self, reset_lr = True):  
@@ -259,13 +271,13 @@ class PPO(Agent):
             # reward_t = rewards[batch_ids]
             not_done_t = not_dones_t[batch_ids]
 
-            obs_t = torch.DoubleTensor(obs_t.reshape((self.sequence_length+1, batch_size) + tuple(self.obs_dim))).to(self.device)
+            obs_t = torch.FloatTensor(obs_t.reshape((self.sequence_length+1, batch_size) + tuple(self.obs_dim))).to(self.device)
             if self.action_type == 'Continuous':
-                action_t = torch.DoubleTensor(action_t.reshape((self.sequence_length+1, batch_size)+ tuple(self.action_dim))).to(self.device)
+                action_t = torch.FloatTensor(action_t.reshape((self.sequence_length+1, batch_size)+ tuple(self.action_dim))).to(self.device)
             elif self.action_type == 'Discrete':
                 action_t = torch.LongTensor(action_t.reshape((self.sequence_length+1, batch_size,1))).to(self.device)
-            not_done_t = torch.DoubleTensor(not_done_t.reshape((self.sequence_length+1, batch_size, 1))).to(self.device)
-            memories = torch.zeros((self.sequence_length+1, batch_size, self.memory_size[0]),dtype=torch.float64).to(self.device)
+            not_done_t = torch.FloatTensor(not_done_t.reshape((self.sequence_length+1, batch_size, 1))).to(self.device)
+            memories = torch.zeros((self.sequence_length+1, batch_size, self.memory_size[0]),dtype=torch.float32).to(self.device)
 
             batch_loss = 0
             for i in range(0, self.sequence_length):
@@ -696,7 +708,7 @@ class PPO(Agent):
                 batch_actor_loss = 0
                 batch_critic_loss = 0
                 batch_loss = 0
-        
+                
                 for i in range(0, self.sequence_length):
                     obs_tensor = b_obs[i]
                     if self.has_memory:
@@ -743,8 +755,17 @@ class PPO(Agent):
                 # Update actor-critic
                 self.optimizer.zero_grad()
                 batch_loss.backward()
-                grad_norm = sum(p.grad.data.norm(2).item() ** 2 for p in self.acmodel.parameters() if p.requires_grad == True) ** 0.5
+                for name, p in self.acmodel.named_parameters():
+                    if p.requires_grad:
+                        if p.grad is None:
+                            print(f"[Warning] No gradient for: {name}")
                 torch.nn.utils.clip_grad_norm_(self.acmodel.parameters(), self.max_grad_norm)
+                grad_norm = 0.0
+                for p in self.acmodel.parameters():
+                    if p.requires_grad and p.grad is not None:
+                        grad_norm += p.grad.data.norm(2).item() ** 2
+                grad_norm = grad_norm ** 0.5
+                # grad_norm = sum(p.grad.data.norm(2).item() ** 2 for p in self.acmodel.parameters() if p.requires_grad == True) ** 0.5
                 self.optimizer.step()
 
                 # Use action to take the suitable Q value
@@ -821,23 +842,23 @@ class PPO(Agent):
         obs, actions, logprobs, values, rewards, dones, memories = trajectory
         next_obs, next_done, next_memory = next 
 
-        obs = torch.DoubleTensor(obs).to(self.device)
+        obs = torch.FloatTensor(obs).to(self.device)
         if self.action_type == 'Continuous':
-            actions = torch.DoubleTensor(actions).to(self.device)
+            actions = torch.FloatTensor(actions).to(self.device)
         elif self.action_type == 'Discrete':
             actions = torch.LongTensor(actions).to(self.device)
-        logprobs = torch.DoubleTensor(logprobs).to(self.device)
-        values = torch.DoubleTensor(values).to(self.device)
-        rewards = torch.DoubleTensor(rewards).to(self.device)
-        dones = torch.DoubleTensor(dones).to(self.device)
+        logprobs = torch.FloatTensor(logprobs).to(self.device)
+        values = torch.FloatTensor(values).to(self.device)
+        rewards = torch.FloatTensor(rewards).to(self.device)
+        dones = torch.FloatTensor(dones).to(self.device)
         if self.has_memory: 
-            memories = torch.DoubleTensor(memories).to(self.device)
+            memories = torch.FloatTensor(memories).to(self.device)
         
-        next_obs = torch.DoubleTensor(next_obs).to(self.device).unsqueeze(0)      
+        next_obs = torch.FloatTensor(next_obs).to(self.device).unsqueeze(0)      
         
         if self.has_memory:
-            next_memory = torch.DoubleTensor(next_memory).to(self.device).unsqueeze(0)
-            next_done = torch.DoubleTensor([next_done]).to(self.device).unsqueeze(0)
+            next_memory = torch.FloatTensor(next_memory).to(self.device).unsqueeze(0)
+            next_done = torch.FloatTensor([next_done]).to(self.device).unsqueeze(0)
 
         return obs, actions, logprobs, values, rewards, dones, memories, next_obs, next_done, next_memory
     

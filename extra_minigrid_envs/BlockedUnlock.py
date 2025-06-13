@@ -94,15 +94,16 @@ class BlockedUnlockEnv(RoomGrid):
         # obj, _ = self.add_object(1, 0, kind="box")
         # Make sure the two rooms are directly connected by an unlocked door
         door, pos = self.add_door(0, 0, 0, locked=False)
-        # Block the door with a ball
-        color = self._rand_color()
-        self.grid.set(pos[0] - 1, pos[1], Ball(color))
-        
+                
         # Add a key to unlock the door
         key, _ = self.add_object(0, 0, "key", door.color)
 
         self.place_agent(0, 0)
 
+        # Block the door with a ball
+        color = self._rand_color()
+        self.grid.set(pos[0] - 1, pos[1], Ball(color))
+        
         self.key = key
         self.door = door
         self.mission = f"open the door"

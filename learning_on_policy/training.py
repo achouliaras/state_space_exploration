@@ -145,9 +145,10 @@ class Workspace(object):
         total_time=0
         start_time = time.time()
 
-        # rng = np.random.RandomState(self.cfg.seed)
-        # obs, _ = self.env.reset(seed = rng.randint(0, 2**31 - 1))
-        obs, _ = self.env.reset(seed = self.cfg.seed)
+        rng = np.random.RandomState(self.cfg.seed)
+        seed_pool = rng.randint(0, 2**30 - 1, 5)
+        obs, _ = self.env.reset(seed = int(rng.choice(seed_pool)))
+        # obs, _ = self.env.reset(seed = self.cfg.seed)
         self.state_visitation.get_env_view()
         # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
         done = 0 
@@ -173,17 +174,18 @@ class Workspace(object):
                 # Action logic
                 with torch.no_grad():
                     if self.agent.has_memory:
-                        obs_tensor = torch.DoubleTensor(obs).to(self.device).unsqueeze(0)
-                        memory_tensor = torch.DoubleTensor(memory).to(self.device).unsqueeze(0)
-                        mask_tensor = torch.DoubleTensor(1-done).to(self.device).unsqueeze(0)
+                        obs_tensor = torch.FloatTensor(obs).to(self.device).unsqueeze(0)
+                        memory_tensor = torch.FloatTensor(memory).to(self.device).unsqueeze(0)
+                        mask_tensor = torch.FloatTensor(1-done).to(self.device).unsqueeze(0)
                         # print(memory_tensor.shape)
                         # print(mask_tensor.shape)
+                        
                         action, logprob, _, value, memory = self.agent.get_action(obs=obs_tensor,
                                                                           action=None,
                                                                           memory=memory_tensor * mask_tensor)
                         memory = memory.detach().cpu().numpy()[0]
                     else:
-                        action, logprob, _, value, _ = self.agent.get_action(torch.DoubleTensor(obs).to(self.device).unsqueeze(0))
+                        action, logprob, _, value, _ = self.agent.get_action(torch.FloatTensor(obs).to(self.device).unsqueeze(0))
                 action = action.detach().cpu().numpy()[0]
                 
                 self.actions[step] = action
@@ -212,6 +214,7 @@ class Workspace(object):
                 next_memory = None
                 if self.agent.has_memory:
                     next_memory = memory
+
                 self.rewards[step] = reward
                 
                 obs = next_obs
@@ -251,8 +254,8 @@ class Workspace(object):
                     episode_length = 0
                     self.step = global_step
                     self.episode += 1
-                    # obs, _ = self.env.reset(seed = rng.randint(0, 2**31 - 1))
-                    obs, _ = self.env.reset(seed = self.cfg.seed)
+                    obs, _ = self.env.reset(seed = int(rng.choice(seed_pool)))
+                    # obs, _ = self.env.reset(seed = self.cfg.seed)
                     # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout                    
                     done = 0 
                     if self.agent.has_memory:
@@ -267,6 +270,7 @@ class Workspace(object):
             # update_time = time.time()
             self.agent.update([self.obs, self.actions, self.logprobs, self.values, self.rewards, self.dones, self.memories], 
                               [next_obs, next_done, next_memory], self.logger, global_step)
+            # print(f'Iteration {iteration} of {self.num_iterations} completed. Global step: {global_step}, Episode: {self.episode}, Reward: {episode_reward:.2f}, True Reward: {true_episode_reward:.2f}, Length: {episode_length}')
             # update_time = time.time() - update_time
             # print(f'Update of {self.num_update_steps} steps took {update_time:.2f} seconds')
 
@@ -285,7 +289,7 @@ class Workspace(object):
             self.logger.log('train/episode_success', episode_success, global_step)
             self.logger.log('train/true_episode_success', episode_success, global_step)
 
-        if true_episode_reward > max_reward:
+        if true_episode_reward >= max_reward:
             max_reward = true_episode_reward
             print(f'New max reward: {max_reward} at step {self.global_step}')
             self.save_results()

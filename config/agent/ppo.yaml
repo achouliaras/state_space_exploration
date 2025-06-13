@@ -5,21 +5,21 @@ action_dim: Null # to be specified on execution
 action_range: Null # to be specified on execution
 action_cfg: Null # to be specified on execution
 encoder_update_epochs: 1
-  
+
 discrete_action:
   batch_size: 64 # num_update_steps
-  lr: 3e-3 # It was 3e-4
+  lr: 3e-4 # It was 3e-4
   anneal_lr: True # It was True
-  discount: 0.99 # It was 0.99
+  discount: 0.99
   gae_lambda: 0.95 # It was 0.95
   num_minibatches: 4
   update_epochs: 4
   norm_adv: True # It was False <<<
-  clip_coef: 0.5 # It was 0.1
-  clip_vloss: False # It was True     *** Seems useful ***
+  clip_coef: 0.2 # It was 0.1
+  clip_vloss: True
   ent_coef: 0.005 # It was 0.005
   vf_coef: 0.5 
-  max_grad_norm: 1.0 # It was 0.5
+  max_grad_norm: 0.5
   target_kl: None
   sequence_length: 4
 

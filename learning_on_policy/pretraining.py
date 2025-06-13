@@ -189,9 +189,9 @@ class Workspace(object):
                 # Action logic
                 with torch.no_grad():
                     if self.agent.has_memory:
-                        obs_tensor = torch.DoubleTensor(obs).to(self.device).unsqueeze(0)
-                        memory_tensor = torch.DoubleTensor(memory).to(self.device).unsqueeze(0)
-                        mask_tensor = torch.DoubleTensor(1-done).to(self.device).unsqueeze(0)
+                        obs_tensor = torch.FloatTensor(obs).to(self.device).unsqueeze(0)
+                        memory_tensor = torch.FloatTensor(memory).to(self.device).unsqueeze(0)
+                        mask_tensor = torch.FloatTensor(1-done).to(self.device).unsqueeze(0)
                         # print(memory_tensor.shape)
                         # print(mask_tensor.shape)
                         action, logprob, _, value, memory = self.agent.get_pretrain_action(obs=obs_tensor,
@@ -199,7 +199,7 @@ class Workspace(object):
                                                                           memory=memory_tensor * mask_tensor)
                         memory = memory.detach().cpu().numpy()[0]
                     else:
-                        action, logprob, _, value, _ = self.agent.get_pretrain_action(torch.DoubleTensor(obs).to(self.device).unsqueeze(0))
+                        action, logprob, _, value, _ = self.agent.get_pretrain_action(torch.FloatTensor(obs).to(self.device).unsqueeze(0))
                 action = action.detach().cpu().numpy()[0]
                 
                 self.actions[step] = action

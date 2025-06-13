@@ -29,20 +29,20 @@ class IntrinsicRewardModel:
         obs, actions, logprobs, values, rewards, dones, memories = trajectory
         next_obs, next_done, next_memory = next
 
-        obs = torch.DoubleTensor(obs).to(self.device).squeeze(1)
+        obs = torch.FloatTensor(obs).to(self.device).squeeze(1)
         if self.action_type == 'Continuous':
-            actions = torch.DoubleTensor(actions).to(self.device).squeeze(1)
+            actions = torch.FloatTensor(actions).to(self.device).squeeze(1)
         elif self.action_type == 'Discrete':
             actions = torch.LongTensor(actions).to(self.device).squeeze(1).squeeze(1)
-        mask = torch.DoubleTensor(np.array([1-dones])).to(self.device).squeeze(0)
+        mask = torch.FloatTensor(np.array([1-dones])).to(self.device).squeeze(0)
         if self.has_memory: 
-            memories = torch.DoubleTensor(memories).to(self.device).squeeze(1)        
-        next_obs = torch.DoubleTensor(next_obs).to(self.device).unsqueeze(0)  
+            memories = torch.FloatTensor(memories).to(self.device).squeeze(1)        
+        next_obs = torch.FloatTensor(next_obs).to(self.device).unsqueeze(0)  
         next_obs = torch.cat([obs[1:], next_obs])     
-        next_mask = torch.DoubleTensor(np.array([1-next_done])).to(self.device).unsqueeze(0)
+        next_mask = torch.FloatTensor(np.array([1-next_done])).to(self.device).unsqueeze(0)
         next_mask = torch.cat([mask[1:], next_mask])
         if self.has_memory:
-            next_memory = torch.DoubleTensor(next_memory).to(self.device).unsqueeze(0)
+            next_memory = torch.FloatTensor(next_memory).to(self.device).unsqueeze(0)
             next_memory = torch.cat([memories[1:], next_memory])
         
         local_reward = self.calculate_local_reward(trajectory, next, diff=diff)
@@ -63,16 +63,16 @@ class IntrinsicRewardModel:
     def r_hat(self, obs_tensor, action, memory_tensor, mask_tensor, next_obs, next_done, next_memory, logger, step, add=False):
         obs = obs_tensor.squeeze(1)
         if self.action_type == 'Continuous':
-            action = torch.DoubleTensor((action)).to(self.device)
+            action = torch.FloatTensor((action)).to(self.device)
         elif self.action_type == 'Discrete':
             action = torch.LongTensor([action]).to(self.device)
         mask = mask_tensor
         if self.has_memory: 
             memory = memory_tensor.squeeze(1)    
-        next_obs = torch.DoubleTensor(next_obs).to(self.device).unsqueeze(0)      
-        next_mask = torch.DoubleTensor(np.array([1-next_done])).to(self.device).unsqueeze(0)
+        next_obs = torch.FloatTensor(next_obs).to(self.device).unsqueeze(0)      
+        next_mask = torch.FloatTensor(np.array([1-next_done])).to(self.device).unsqueeze(0)
         if self.has_memory:
-            next_memory = torch.DoubleTensor(next_memory).to(self.device).unsqueeze(0)
+            next_memory = torch.FloatTensor(next_memory).to(self.device).unsqueeze(0)
             next_memory = torch.cat([memory[1:], next_memory])
 
         with torch.no_grad():

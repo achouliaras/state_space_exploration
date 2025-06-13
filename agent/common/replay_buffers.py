@@ -20,9 +20,9 @@ class NovelExperienceMemory(torchrl.data.ReplayBuffer):
         self.encoder = encoder
         
         # Keep track of states for fast similarity checking
-        self.observations = torch.zeros((capacity, *self.encoder.obs_shape), dtype=torch.double, device=device)
-        self.memories = torch.zeros((capacity, self.encoder.memory_size), dtype=torch.double, device=device)
-        self.state_embeddings = torch.zeros((capacity, self.encoder.embedding_size), dtype=torch.double ,device=device)
+        self.observations = torch.zeros((capacity, *self.encoder.obs_shape), dtype=torch.float, device=device)
+        self.memories = torch.zeros((capacity, self.encoder.memory_size), dtype=torch.float, device=device)
+        self.state_embeddings = torch.zeros((capacity, self.encoder.embedding_size), dtype=torch.float ,device=device)
         self.novelty_scores = torch.zeros(capacity, device=device)
         self.ptr = 0
         self.full =False
@@ -185,15 +185,15 @@ class TrajectoryBuffer(object):
         self.has_memory = has_memory
         self.memory_size = memory_size
 
-        self.obses = np.empty((capacity, 1, *obs_shape), dtype=np.float64)
-        self.actions = np.empty((capacity, 1, *action_shape), dtype=np.float64)
-        self.log_probs = np.empty((capacity, 1), dtype=np.float64)
-        self.rewards = np.empty((capacity, 1), dtype=np.float64)
-        self.dones = np.empty((capacity, 1), dtype=np.float64)
-        self.values = np.empty((capacity, 1), dtype=np.float64)
+        self.obses = np.empty((capacity, 1, *obs_shape), dtype=np.float32)
+        self.actions = np.empty((capacity, 1, *action_shape), dtype=np.float32)
+        self.log_probs = np.empty((capacity, 1), dtype=np.float32)
+        self.rewards = np.empty((capacity, 1), dtype=np.float32)
+        self.dones = np.empty((capacity, 1), dtype=np.float32)
+        self.values = np.empty((capacity, 1), dtype=np.float32)
         self.memories = None
         if self.has_memory:
-            self.memories = np.empty((capacity, 1, *memory_size), dtype=np.float64)
+            self.memories = np.empty((capacity, 1, *memory_size), dtype=np.float32)
 
         self.window = window
 

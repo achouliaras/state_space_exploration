@@ -57,13 +57,32 @@ class Encoder(nn.Module):
     def forward(self, obs, memory=None):
         x = obs.permute(0, 1, 2, 3)
         
+        if (torch.any(torch.isnan(x))):
+            if torch.isnan(x).any(): print(f"Input CNN obs contains NaN!: {x}")
+            if torch.isinf(x).any(): print(f"Input CNN obs contain Inf!: {x}")
+
         # print(f'input: {x[0]}')
         if 'CNN' in self.architecture or 'ResNet' in self.architecture:
             # print('Obs shape ', x[0].shape)
-            x = self.cnn(x)
+            # x = self.cnn(x)
+            for i, layer in enumerate(self.cnn):
+                x = layer(x)
+                if torch.isnan(x).any():
+                    print(f'Obs min & max: {obs.min()}, {obs.max()}')
+                    print(x.shape)
+                    print(f"NaN detected after layer {i} ({layer})")
+                    print('NaN weight: ', torch.isnan(layer.weight).any())
+                    print('Max weight: ', layer.weight.abs().max())
+                    # raise RuntimeError (f"NaN detected after layer {i} ({layer})")
         else:
             x = self.mlp(x) # CHECK ISSUE 
             # print('MLP')
+
+        if (torch.any(torch.isnan(x))):
+            print(f'Obs min & max: {obs.min()}, {obs.max()}')
+            if torch.isnan(x).any(): print(f"Output CNN obs contains NaN!: {x}")
+            if torch.isinf(x).any(): print(f"Output CNN obs contain Inf!: {x}")
+
         # print(f'output: {x[0]}')
         # x = x.reshape(x.shape[0], -1)
         if memory is not None:
@@ -78,7 +97,7 @@ class Encoder(nn.Module):
             embedding = hidden
             memory = torch.cat((hidden, cell), dim=1)
         elif 'GRU' in self.architecture:
-            hidden = memory
+            hidden = torch.zeros_like(memory)
             hidden = self.memory_module(x, hidden)
             # hidden = self.memory_norm(hidden)
             embedding = hidden
@@ -87,8 +106,11 @@ class Encoder(nn.Module):
             embedding = x
         
         if (torch.any(torch.isnan(embedding))):
-            print('Emb=', embedding)
-            print('Mem=', memory)
+            if torch.isnan(embedding).any(): print(f"Output embedding contains NaN!: {embedding}")
+            if torch.isinf(embedding).any(): print(f"Output embedding contain Inf!: {embedding}")
+            if torch.isnan(memory).any(): print(f"Output memory contains NaN!: {memory}")
+            if torch.isinf(memory).any(): print(f"Output memory contain Inf!: {memory}")
+
         return embedding, memory
 
     def log(self, logger, step):

@@ -98,14 +98,16 @@ class BlockedPickupEnv(RoomGrid):
         obj, _ = self.place_in_room(1, 0, Goal())
         # Make sure the two rooms are directly connected by a locked door
         door, pos = self.add_door(0, 0, 0, locked=False)
-        # Block the door with a ball
-        color = self._rand_color()
-        self.grid.set(pos[0] - 1, pos[1], Ball(color))
+        
         # # Add a key to unlock the door
         # self.add_object(0, 0, "key", door.color)
 
         self.place_agent(0, 0)
 
+        # Block the door with a ball
+        color = self._rand_color()
+        self.grid.set(pos[0] - 1, pos[1], Ball(color))
+        
         self.goal = obj
         self.mission = f"get to the green goal square"
 

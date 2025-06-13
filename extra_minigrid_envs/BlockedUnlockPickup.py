@@ -65,10 +65,7 @@ class BlockedUnlockPickupEnv(RoomGrid):
     """
 
     def __init__(self, max_steps: int | None = None, **kwargs):
-        mission_space = MissionSpace(
-            mission_func=self._gen_mission,
-            ordered_placeholders=[COLOR_NAMES, ["box", "key"]],
-        )
+        mission_space = MissionSpace(mission_func=self._gen_mission)
 
         room_size = 5
         if max_steps is None:
@@ -84,7 +81,7 @@ class BlockedUnlockPickupEnv(RoomGrid):
         )
 
     @staticmethod
-    def _gen_mission(color: str, obj_type: str):
+    def _gen_mission():
         return f"get to the green goal square"
 
     def _gen_grid(self, width, height):
@@ -93,17 +90,20 @@ class BlockedUnlockPickupEnv(RoomGrid):
         # # Add a box to the room on the right
         # obj, _ = self.add_object(1, 0, kind="box")
 
-        # Place a goal in the room on the right
-        obj, _ = self.place_in_room(1, 0, Goal())
         # Make sure the two rooms are directly connected by a locked door
         door, pos = self.add_door(0, 0, 0, locked=True)
-        # Block the door with a ball
-        color = self._rand_color()
-        self.grid.set(pos[0] - 1, pos[1], Ball(color))
+        
         # Add a key to unlock the door
         self.add_object(0, 0, "key", door.color)
 
         self.place_agent(0, 0)
+
+        # Place a goal in the room on the right
+        obj, _ = self.place_in_room(1, 0, Goal())
+
+        # Block the door with a ball
+        color = self._rand_color()
+        self.grid.set(pos[0] - 1, pos[1], Ball(color))
 
         self.goal = obj
         self.mission = f"get to the green goal square"
