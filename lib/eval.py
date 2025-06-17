@@ -4,12 +4,12 @@ import torch
 import numpy as np
 from tqdm import tqdm
 
-def evaluate_agent(agent, cfg, logger, get_action = None, seed=None, import_env=None, global_step=None):
+def evaluate_agent(agent, cfg, logger, get_action = None, seed=None, eval_env=None, global_step=None):
     cfg.save_video=True
-    if import_env is None:
-        env, cfg, obs_space = env_setup.make_env(cfg, env_name=cfg.env ,render_mode=cfg.render_mode)
+    if eval_env is None:
+        raise ValueError("eval_env must be specified for evaluation")
     else:
-        env, cfg, obs_space = env_setup.make_env(cfg, env_name=import_env, render_mode=cfg.render_mode)
+        env, cfg, obs_space = env_setup.make_env(cfg, env_name=eval_env, render_mode=cfg.render_mode)
     
     if get_action == None:
         get_action = agent.get_action

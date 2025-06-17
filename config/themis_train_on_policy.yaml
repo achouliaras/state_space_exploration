@@ -53,6 +53,7 @@ reward_schedule: 0
 # evaluation config
 eval_frequency: 50000 #100
 num_eval_episodes: 10
+eval_env: ${env}
 
 # logger
 log_frequency: 10000

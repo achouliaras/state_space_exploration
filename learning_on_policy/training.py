@@ -287,7 +287,7 @@ class Workspace(object):
             # update_time = time.time() - update_time
             # print(f'Update of {self.num_update_steps} steps took {update_time:.2f} seconds')
             if iteration % round(0.05*self.num_iterations)==0:
-                self.logger = evaluate_agent(self.agent, self.cfg, self.logger, seed=self.cfg.seed, import_env=self.cfg.import_env, global_step=global_step)
+                self.logger = evaluate_agent(self.agent, self.cfg, self.logger, seed=self.cfg.seed, eval_env=self.cfg.eval_env, global_step=global_step)
 
 
             if self.cfg.log_success:
@@ -316,7 +316,7 @@ class Workspace(object):
             [x.close() for x in self.envs]
         print('TRAINING FINISHED')
         
-        self.logger = evaluate_agent(self.agent, self.cfg, self.logger, seed=self.cfg.seed, global_step=global_step)
+        self.logger = evaluate_agent(self.agent, self.cfg, self.logger, seed=self.cfg.seed, eval_env=self.env, global_step=global_step)
         self.logger.close()
 
     def save_results(self):
