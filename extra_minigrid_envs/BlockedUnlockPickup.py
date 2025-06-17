@@ -96,8 +96,6 @@ class BlockedUnlockPickupEnv(RoomGrid):
         # Add a key to unlock the door
         self.add_object(0, 0, "key", door.color)
 
-        self.place_agent(0, 0)
-
         # Place a goal in the room on the right
         obj, _ = self.place_in_room(1, 0, Goal())
 
@@ -105,6 +103,8 @@ class BlockedUnlockPickupEnv(RoomGrid):
         color = self._rand_color()
         self.grid.set(pos[0] - 1, pos[1], Ball(color))
 
+        self.place_agent(0, 0)
+        
         self.goal = obj
         self.mission = f"get to the green goal square"
 

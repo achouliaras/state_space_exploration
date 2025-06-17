@@ -52,9 +52,20 @@ class Workspace(object):
 
         utils.set_seed_everywhere(cfg.seed)
         self.device = torch.device(cfg.device)
-        self.env, cfg, self.obs_space = env_setup.make_env(cfg, cfg.render_mode)
-        self.env.action_space.seed(cfg.seed)
         self.cfg = cfg
+
+        env_list = [x.strip() for x in cfg.env.split(',')]
+        self.env_list = env_list
+        self.envs = []
+        for i, env_name in enumerate(env_list):
+            print(f'Creating environment {i+1}/{len(env_list)}: {env_name}')
+            env, cfg, obs_space = env_setup.make_env(cfg, env_name=env_name, render_mode=cfg.render_mode)
+            if i == 0:
+                self.env = env
+                self.obs_space = obs_space
+            else:
+                assert self.obs_space == obs_space, "Observation spaces of environments do not match!" 
+            self.envs.append(env)
         
         self.state_visitation = trajectory_io.StateVisitation(self.work_dir, self.cfg.models_dir, self.env.unwrapped)
 
@@ -151,6 +162,7 @@ class Workspace(object):
         # obs, _ = self.env.reset(seed = self.cfg.seed)
         self.state_visitation.get_env_view()
         # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
+        active_env = self.env if len(self.envs) == 1 else self.envs[0]
         done = 0 
         if self.agent.has_memory:
             memory = np.zeros(self.agent.memory_size)
@@ -208,7 +220,7 @@ class Workspace(object):
                 # plt.pause(1)
                 
                 # execute step and log data
-                next_obs, reward, terminated, truncated, info = self.env.step(action)
+                next_obs, reward, terminated, truncated, info = active_env.step(action)
                 self.state_visitation.update()
                 next_done = terminated or truncated
                 next_memory = None
@@ -254,9 +266,10 @@ class Workspace(object):
                     episode_length = 0
                     self.step = global_step
                     self.episode += 1
-                    obs, _ = self.env.reset(seed = int(rng.choice(seed_pool)))
-                    # obs, _ = self.env.reset(seed = self.cfg.seed)
-                    # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout                    
+                    active_env = self.env if len(self.envs) == 1 else self.envs[self.episode % len(self.envs)]
+                    obs, _ = active_env.reset(seed = int(rng.choice(seed_pool)))
+                    # obs, _ = active_env.reset(seed = self.cfg.seed)
+                    # obs, _, _, _, _ = active_env.step(1) # FIRE action for breakout                    
                     done = 0 
                     if self.agent.has_memory:
                         memory = np.zeros(self.agent.memory_size)
@@ -273,6 +286,9 @@ class Workspace(object):
             # print(f'Iteration {iteration} of {self.num_iterations} completed. Global step: {global_step}, Episode: {self.episode}, Reward: {episode_reward:.2f}, True Reward: {true_episode_reward:.2f}, Length: {episode_length}')
             # update_time = time.time() - update_time
             # print(f'Update of {self.num_update_steps} steps took {update_time:.2f} seconds')
+            if iteration % round(0.05*self.num_iterations)==0:
+                self.logger = evaluate_agent(self.agent, self.cfg, self.logger, seed=self.cfg.seed, import_env=self.cfg.import_env, global_step=global_step)
+
 
             if self.cfg.log_success:
                 episode_success = max(episode_success, terminated)
@@ -294,11 +310,13 @@ class Workspace(object):
             print(f'New max reward: {max_reward} at step {self.global_step}')
             self.save_results()
         self.state_visitation.plot(self.global_step)  
-        # self.logger.dump(global_step, ty='train')
-        self.env.close()
+        if len(self.envs) == 1:
+            self.env.close()
+        else:
+            [x.close() for x in self.envs]
         print('TRAINING FINISHED')
         
-        self.logger = evaluate_agent(self.agent, self.cfg, self.logger, seed=self.cfg.seed)
+        self.logger = evaluate_agent(self.agent, self.cfg, self.logger, seed=self.cfg.seed, global_step=global_step)
         self.logger.close()
 
     def save_results(self):

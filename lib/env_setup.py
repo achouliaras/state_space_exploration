@@ -15,7 +15,7 @@ def record_video_wrap(env, cfg):
                                    )
     return env, cfg
         
-def make_env(cfg, render_mode=None):
+def make_env(cfg, env_name, render_mode=None):
     #gym.logger.set_level(40) ???
     # print('GYM LOCATION: ',gym.__file__)
     
@@ -106,7 +106,7 @@ def make_env(cfg, render_mode=None):
         # minigrid.register_minigrid_envs()
         # gym.pprint_registry()
         # Helper function to create MiniGrid environment
-        id = cfg.domain+'-'+cfg.env
+        id = cfg.domain+'-'+ env_name
         if cfg.max_episode_steps:
             env = gym.make(id=id, render_mode=render_mode, max_steps=cfg.max_episode_steps)
         else:

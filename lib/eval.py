@@ -4,9 +4,12 @@ import torch
 import numpy as np
 from tqdm import tqdm
 
-def evaluate_agent(agent, cfg, logger, get_action = None, seed=None):
+def evaluate_agent(agent, cfg, logger, get_action = None, seed=None, import_env=None, global_step=None):
     cfg.save_video=True
-    env, cfg, obs_space = env_setup.make_env(cfg, cfg.render_mode)
+    if import_env is None:
+        env, cfg, obs_space = env_setup.make_env(cfg, env_name=cfg.env ,render_mode=cfg.render_mode)
+    else:
+        env, cfg, obs_space = env_setup.make_env(cfg, env_name=import_env, render_mode=cfg.render_mode)
     
     if get_action == None:
         get_action = agent.get_action
@@ -14,7 +17,6 @@ def evaluate_agent(agent, cfg, logger, get_action = None, seed=None):
     average_episode_reward = 0
     average_true_episode_reward = 0
     success_rate = 0
-    step = 0
     print('EVALUATION STARTS')
     for episode in tqdm(range(cfg.num_eval_episodes)):
         if seed is None:
@@ -55,12 +57,11 @@ def evaluate_agent(agent, cfg, logger, get_action = None, seed=None):
             next_obs, reward, terminated, truncated, info = env.step(action)
             done = terminated or truncated
             episode_reward += reward
-            true_episode_reward += reward
+            true_episode_reward += info['true_reward']
             if cfg.log_success:
                 episode_success = max(episode_success, terminated)
             
             obs = next_obs
-            step += 1
             
         average_episode_reward += episode_reward
         average_true_episode_reward += true_episode_reward
@@ -74,6 +75,10 @@ def evaluate_agent(agent, cfg, logger, get_action = None, seed=None):
         success_rate /= cfg.num_eval_episodes
         success_rate *= 100.0
     
+    if global_step is None:
+        step = 0
+    else:
+        step = global_step
     logger.log('eval/episode', episode+1, step)
     logger.log('eval/avg_episode_reward', average_episode_reward, step)
     logger.log('eval/avg_true_episode_reward', average_true_episode_reward, step)
