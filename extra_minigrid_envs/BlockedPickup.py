@@ -105,6 +105,7 @@ class BlockedPickupEnv(RoomGrid):
         color = self._rand_color()
         self.grid.set(pos[0] - 1, pos[1], Ball(color))
         
+        self.door = door
         self.goal = obj
         self.mission = f"get to the green goal square"
 
