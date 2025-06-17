@@ -324,7 +324,7 @@ class Workspace(object):
             [x.close() for x in self.envs]
         print('TRAINING FINISHED')
         
-        self.logger = evaluate_agent(self.agent, self.cfg, self.logger, seed=self.cfg.seed, eval_env=self.env, global_step=global_step)
+        self.logger = evaluate_agent(self.agent, self.cfg, self.logger, seed=self.cfg.seed, eval_env=self.env_list[0], global_step=global_step)
         self.logger.close()
 
     def save_results(self):
