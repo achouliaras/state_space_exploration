@@ -80,7 +80,7 @@ class UnlockPickupEnv(RoomGrid):
         self.first_time_key_pickup = True
 
     @staticmethod
-    def _gen_mission(color: str):
+    def _gen_mission():
         return f"get to the green goal square"
 
     def _gen_grid(self, width, height):

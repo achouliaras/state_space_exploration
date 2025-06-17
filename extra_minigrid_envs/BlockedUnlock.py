@@ -84,7 +84,7 @@ class BlockedUnlockEnv(RoomGrid):
         self.first_time_key_pickup = True
 
     @staticmethod
-    def _gen_mission(color: str, obj_type: str):
+    def _gen_mission():
         return f"open the door"
 
     def _gen_grid(self, width, height):

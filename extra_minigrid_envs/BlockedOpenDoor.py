@@ -82,7 +82,7 @@ class BlockedOpenDoorEnv(RoomGrid):
         )
 
     @staticmethod
-    def _gen_mission(color: str, obj_type: str):
+    def _gen_mission():
         return f"open the door"
 
     def _gen_grid(self, width, height):

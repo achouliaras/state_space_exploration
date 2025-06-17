@@ -85,7 +85,7 @@ class BlockedPickupEnv(RoomGrid):
         )
 
     @staticmethod
-    def _gen_mission(color: str, obj_type: str):
+    def _gen_mission():
         return f"get to the green goal square"
 
     def _gen_grid(self, width, height):
