@@ -3,13 +3,19 @@ env1=PickupKey-v0 #Empty-8x8-v0 #UnlockPickup-v0 # highway-v0 # Breakout-v5
 env2=Unlock-v0
 env3=UnlockPickup-v0
 env4=BlockedUnlockPickup-v0
+
+eval_env1=PickupKey-v0 #Empty-8x8-v0 #UnlockPickup-v0 # highway-v0 # Breakout-v5
+eval_env2=Unlock-v0
+eval_env3=UnlockPickup-v0
+eval_env4=BlockedUnlockPickup-v0
+
 max_episode_steps=200
-architecture=CNN
+architecture=CNN-GRU
 sequence_length=5
 device=cuda
 
 # Offline Pre-Training
-offline_num_seed_steps=5e3
+offline_num_seed_steps=5e5
 offline_epochs=20
 off_export_protocol=OFFLINE
 
@@ -25,7 +31,7 @@ pre_export_protocol=ONLINE
 pre_freeze_protocol=NO # NO, CNN-PART, CNN, ALL
 
 # First Training
-num_train_steps=1000000
+num_train_steps=2000000
 import_model=True
 import_protocol=NORMAL # NORMAL, OFFLINE, ONLINE, OFFLINE-CURRICULUM
 export_protocol=CURRICULUM
@@ -69,38 +75,38 @@ for seed in 1 2 3 4 5 6 7 8 9 10; do
 
        # # Training script
        # python -m learning_on_policy.training device=$device \
-       #        domain=$domain env=$env1 render_mode=rgb_array max_episode_steps=$max_episode_steps seed=$seed architecture=$architecture \
+       #        domain=$domain env=$env1 eval_env=$eval_env1 render_mode=rgb_array max_episode_steps=$max_episode_steps seed=$seed architecture=$architecture \
        #        agent.discrete_action.sequence_length=$sequence_length offline_epochs=$offline_epochs freeze_protocol=$freeze_protocol\
        #        import_model=$import_model import_protocol=$import_protocol import_env=$env4 export_protocol=$export_protocol\
        #        num_seed_steps=$num_seed_steps num_unsup_steps=$num_unsup_steps num_train_steps=$num_train_steps debug=True test=$test_name
 done
 
-# for seed in 1 2 6 9; do
-#        echo "Training for seed $seed in env $env2 done"
+for seed in 1 2 3 4 5 6 7 8 9 10; do
+       echo "Training for seed $seed in env $env2 done"
+       # Training script
+       python -m learning_on_policy.training device=$device \
+              domain=$domain env=$env2 eval_env=$eval_env1 render_mode=rgb_array max_episode_steps=$max_episode_steps seed=$seed architecture=$architecture \
+              agent.discrete_action.sequence_length=$sequence_length offline_epochs=$offline_epochs freeze_protocol=$freeze_protocol\
+              import_model=$import_model import_protocol=CURRICULUM import_env=$env1 export_protocol=$export_protocol\
+              num_seed_steps=$num_seed_steps num_unsup_steps=$num_unsup_steps num_train_steps=$num_train_steps debug=True test=$test_name
+done 
+
+# for seed in 1 2 3 4 5 6 7 8 9 10; do  
+#        echo "Training for seed $seed in env $env3"
 #        # Training script
 #        python -m learning_on_policy.training device=$device \
-#               domain=$domain env=$env2 render_mode=rgb_array max_episode_steps=$max_episode_steps seed=$seed architecture=$architecture \
+#               domain=$domain env=$env3 eval_env=$eval_env2 render_mode=rgb_array max_episode_steps=$max_episode_steps seed=$seed architecture=$architecture \
 #               agent.discrete_action.sequence_length=$sequence_length offline_epochs=$offline_epochs freeze_protocol=$freeze_protocol\
-#               import_model=$import_model import_protocol=CURRICULUM import_env=$env1 export_protocol=$export_protocol\
+#               import_model=$import_model import_protocol=CURRICULUM import_env=$env2 export_protocol=$export_protocol\
 #               num_seed_steps=$num_seed_steps num_unsup_steps=$num_unsup_steps num_train_steps=$num_train_steps debug=True test=$test_name
+# done 
+
+# for seed in 1 4 9; do
+#        echo "Training for seed $seed in env $env4"
+#        # Training script
+#        python -m learning_on_policy.training device=$device \
+#               domain=$domain env=$env4 eval_env=$eval_env3 render_mode=rgb_array max_episode_steps=$max_episode_steps seed=$seed architecture=$architecture \
+#               agent.discrete_action.sequence_length=$sequence_length offline_epochs=$offline_epochs freeze_protocol=$freeze_protocol\
+#               import_model=$import_model import_protocol=CURRICULUM import_env=$env3 export_protocol=$export_protocol\
+#               num_seed_steps=$num_seed_steps num_unsup_steps=$num_unsup_steps num_train_steps=$num_train_steps debug=True test=$test_name  
 # done
-
-for seed in 1 2 3 4 5 6 7 8 9 10; do  
-       echo "Training for seed $seed in env $env3"
-       # Training script
-       python -m learning_on_policy.training device=$device \
-              domain=$domain env=$env3 render_mode=rgb_array max_episode_steps=$max_episode_steps seed=$seed architecture=$architecture \
-              agent.discrete_action.sequence_length=$sequence_length offline_epochs=$offline_epochs freeze_protocol=$freeze_protocol\
-              import_model=$import_model import_protocol=CURRICULUM import_env=$env2 export_protocol=$export_protocol\
-              num_seed_steps=$num_seed_steps num_unsup_steps=$num_unsup_steps num_train_steps=$num_train_steps debug=True test=$test_name
-done   
-
-for seed in 1 2 3 4 5 6 7 8 9 10; do
-       echo "Training for seed $seed in env $env4"
-       # Training script
-       python -m learning_on_policy.training device=$device \
-              domain=$domain env=$env4 render_mode=rgb_array max_episode_steps=$max_episode_steps seed=$seed architecture=$architecture \
-              agent.discrete_action.sequence_length=$sequence_length offline_epochs=$offline_epochs freeze_protocol=$freeze_protocol\
-              import_model=$import_model import_protocol=CURRICULUM import_env=$env3 export_protocol=$export_protocol\
-              num_seed_steps=$num_seed_steps num_unsup_steps=$num_unsup_steps num_train_steps=$num_train_steps debug=True test=$test_name  
-done
