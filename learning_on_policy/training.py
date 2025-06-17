@@ -14,7 +14,7 @@ import tqdm
 from collections import deque
 import copy
 import hydra
-from omegaconf import DictConfig
+from omegaconf import ListConfig, DictConfig
 from termcolor import colored
 
 from lib.logger import Logger
@@ -54,7 +54,15 @@ class Workspace(object):
         self.device = torch.device(cfg.device)
         self.cfg = cfg
 
-        env_list = [x.strip() for x in cfg.env.split(',')]
+        if isinstance(cfg.env, ListConfig):
+            env_list = list(cfg.env)
+        elif isinstance(cfg.env, list):
+            env_list = cfg.env
+        elif isinstance(cfg.env, str):
+            env_list = [cfg.env]
+        else:
+            raise ValueError(f"Unsupported env type: {type(cfg.env)}. Expected list or string.")
+
         self.env_list = env_list
         self.envs = []
         for i, env_name in enumerate(env_list):
