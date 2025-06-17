@@ -60,10 +60,7 @@ class UnlockPickupEnv(RoomGrid):
 
     def __init__(self, max_steps: int | None = None, **kwargs):
         room_size = 5
-        mission_space = MissionSpace(
-            mission_func=self._gen_mission,
-            ordered_placeholders=[COLOR_NAMES],
-        )
+        mission_space = MissionSpace(mission_func=self._gen_mission)
 
         if max_steps is None:
             max_steps = 16 * room_size**2
