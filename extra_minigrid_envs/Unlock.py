@@ -4,6 +4,10 @@ from minigrid.core.mission import MissionSpace
 from minigrid.core.roomgrid import RoomGrid
 from typing import Any, Iterable, SupportsFloat, TypeVar
 from gymnasium.core import ActType, ObsType
+import numpy as np
+
+def manhattan_distance(pos1, pos2):
+    return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
 
 class UnlockEnv(RoomGrid):
     """
@@ -81,11 +85,12 @@ class UnlockEnv(RoomGrid):
         door, _ = self.add_door(0, 0, 0, locked=True)
         # Add a key to unlock the door
         key, _ = self.add_object(0, 0, "key", door.color)
-
         self.place_agent(0, 0)
 
         self.key = key
         self.door = door
+        # self.min_dist_to_point = manhattan_distance(self.agent_pos, self.key.cur_pos)
+        # self.max_dist = self.min_dist_to_point
         self.mission = "open the door"
 
     def _penalty(self) -> float:
@@ -95,20 +100,32 @@ class UnlockEnv(RoomGrid):
         return - 0.8 * (1 / self.max_steps)
     
     def step(self, action):
+        # reward = self._penalty()
+        # terminated = False
+        # if np.array_equal(self.front_pos, self.key.cur_pos) and action != self.actions.pickup:
+        #     # If the agent is at the key position and not picking it up, it is a failure
+        #     reward += -0.2
+        # elif np.array_equal(self.front_pos, self.door.cur_pos) and self.carrying and self.carrying == self.key and action != self.actions.toggle:
+        #     # If the agent is at the door position and not toggling it, it is a failure
+        #     reward += -0.2
+        #     # terminated = True
+        # elif self.carrying and self.carrying == self.key and action == self.actions.drop and self.door.is_locked:
+        #     # Penalty if drop the key while door is locked
+        #     reward += -0.2
         obs, reward, terminated, truncated, info = super().step(action)
-
         info["true_reward"] = 0
-        reward = self._penalty()
+        # reward += self.reward_model()
 
         if action == self.actions.toggle:
             if self.door.is_open:
-                reward += 1 
+                reward += self._reward()
                 terminated = True
                 info["true_reward"] = self._reward()
         elif action == self.actions.pickup:
-            if self.first_time_key_pickup and self.carrying and self.carrying == self.key:
-                reward += 0.2
-                self.first_time_key_pickup = False
+            if self.carrying and self.carrying == self.key:
+                # reward += 0.2
+                if self.first_time_key_pickup:
+                    self.first_time_key_pickup = False
 
         return obs, reward, terminated, truncated, info
     
@@ -121,3 +138,18 @@ class UnlockEnv(RoomGrid):
         # Reset the first time key pickup flag
         self.first_time_key_pickup = True
         return super().reset(seed=seed)
+    
+    def reward_model(self):
+        """
+        Compute the reward to be given
+        """
+        reward = self._penalty()
+
+        if not self.carrying:
+            dist = manhattan_distance(self.agent_pos, self.key.cur_pos)
+        elif self.carrying == self.key:
+            dist = manhattan_distance(self.agent_pos, self.door.cur_pos)
+        else:
+            print(self.carrying)
+        reward += -5*self._penalty() * (1 - (dist/(1+dist)))
+        return reward

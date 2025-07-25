@@ -168,7 +168,7 @@ class Workspace(object):
         seed_pool = rng.randint(0, 2**30 - 1, 5)
         obs, _ = self.env.reset(seed = int(rng.choice(seed_pool)))
         # obs, _ = self.env.reset(seed = self.cfg.seed)
-        self.state_visitation.get_env_view()
+        # self.state_visitation.get_env_view()
         # obs, _, _, _, _ = self.env.step(1) # FIRE action for breakout
         active_env = self.env if len(self.envs) == 1 else self.envs[0]
         done = 0 
@@ -229,7 +229,7 @@ class Workspace(object):
                 
                 # execute step and log data
                 next_obs, reward, terminated, truncated, info = active_env.step(action)
-                self.state_visitation.update()
+                # self.state_visitation.update()
                 next_done = terminated or truncated
                 next_memory = None
                 if self.agent.has_memory:
@@ -243,6 +243,8 @@ class Workspace(object):
                 episode_reward += reward
                 true_episode_reward += info['true_reward']
                 self.action_distribution[INVERSE_ACTION_MAPPING[action]] += 1
+                if self.cfg.log_success:
+                    episode_success = max(episode_success, terminated)
 
                 if terminated or truncated:
                     episode_time = time.time() - start_time
@@ -282,8 +284,9 @@ class Workspace(object):
                     if self.agent.has_memory:
                         memory = np.zeros(self.agent.memory_size)
 
-            if iteration % round(0.2*self.num_iterations)==0:
-                self.state_visitation.plot(self.global_step)
+            # if iteration % round(0.2*self.num_iterations)==0:
+            #     self.state_visitation.plot(self.global_step)
+
             # Training Update 
             # if global_step % self.num_update_steps == 0:
             # print('Actions: ',[i[0][0] for i in self.actions])
@@ -294,12 +297,9 @@ class Workspace(object):
             # print(f'Iteration {iteration} of {self.num_iterations} completed. Global step: {global_step}, Episode: {self.episode}, Reward: {episode_reward:.2f}, True Reward: {true_episode_reward:.2f}, Length: {episode_length}')
             # update_time = time.time() - update_time
             # print(f'Update of {self.num_update_steps} steps took {update_time:.2f} seconds')
+            
             if iteration % round(0.05*self.num_iterations)==0:
                 self.logger = evaluate_agent(self.agent, self.cfg, self.logger, seed=self.cfg.seed, eval_env=self.cfg.eval_env, global_step=global_step)
-
-
-            if self.cfg.log_success:
-                episode_success = max(episode_success, terminated)
 
         episode_time = time.time() - start_time
         total_time += episode_time
@@ -317,7 +317,7 @@ class Workspace(object):
             max_reward = true_episode_reward
             print(f'New max reward: {max_reward} at step {self.global_step}')
             self.save_results()
-        self.state_visitation.plot(self.global_step)  
+        # self.state_visitation.plot(self.global_step)  
         if len(self.envs) == 1:
             self.env.close()
         else:

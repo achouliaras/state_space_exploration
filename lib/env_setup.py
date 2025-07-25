@@ -112,8 +112,8 @@ def make_env(cfg, env_name, render_mode=None):
         else:
             env = gym.make(id=id, render_mode=render_mode) 
         
-        # env = minigrid.wrappers.FullyObsWrapper(env)
-        env = minigrid.wrappers.RGBImgObsWrapper(env, tile_size=3)
+        env = minigrid.wrappers.FullyObsWrapper(env)
+        # env = minigrid.wrappers.RGBImgObsWrapper(env, tile_size=3)
         env = minigrid.wrappers.ImgObsWrapper(env)
         # env = gym.wrappers.NormalizeObservation(env)
         env = NormalizeObservationWrapper(env, std=255.0)

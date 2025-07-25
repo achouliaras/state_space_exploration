@@ -32,9 +32,9 @@ pre_freeze_protocol=NO # NO, CNN-PART, CNN, ALL
 
 # First Training
 num_train_steps=2000000
-import_model=True
+import_model=True # True
 import_protocol=NORMAL # NORMAL, OFFLINE, ONLINE, OFFLINE-CURRICULUM
-export_protocol=CURRICULUM
+export_protocol=CURRICULUM # CURRICULUM
 freeze_protocol=NO # NO, CNN-PART, CNN, ALL
 
 test_name=Vanilla #Vanilla, LMDP_Offline, AE_Offline, AEGIS
@@ -81,7 +81,7 @@ for seed in 1 2 3 4 5 6 7 8 9 10; do
        #        num_seed_steps=$num_seed_steps num_unsup_steps=$num_unsup_steps num_train_steps=$num_train_steps debug=True test=$test_name
 done
 
-for seed in 1 2 3 4 5 6 7 8 9 10; do
+for seed in 1 2 3 4 5; do
        echo "Training for seed $seed in env $env2 done"
        # Training script
        python -m learning_on_policy.training device=$device \
@@ -101,7 +101,7 @@ done
 #               num_seed_steps=$num_seed_steps num_unsup_steps=$num_unsup_steps num_train_steps=$num_train_steps debug=True test=$test_name
 # done 
 
-# for seed in 1 4 9; do
+# for seed in 1 2 3 4 5 6 7 8 9 10; do
 #        echo "Training for seed $seed in env $env4"
 #        # Training script
 #        python -m learning_on_policy.training device=$device \

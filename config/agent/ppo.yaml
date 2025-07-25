@@ -13,7 +13,7 @@ discrete_action:
   discount: 0.99
   gae_lambda: 0.95 # It was 0.95
   num_minibatches: 4
-  update_epochs: 4
+  update_epochs: 10 # It was 4
   norm_adv: True # It was False <<<
   clip_coef: 0.2 # It was 0.1
   clip_vloss: True

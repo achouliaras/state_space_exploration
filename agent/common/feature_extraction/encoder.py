@@ -16,10 +16,10 @@ class Encoder(nn.Module):
             self.cnn = utils.resnet(self.obs_size, self.c, latent_dim, mode=mode)
         elif 'MLP' in architecture:
             # flatten
-            self.image_embedding_size = 512
             self.mlp = utils.mlp(input_dim=np.array(obs_shape).prod(), 
-                                 output_dim=512, 
+                                 output_dim=latent_dim, 
                                  hidden_depth=1, 
+                                 hidden_dim=latent_dim,
                                  activation=nn.ReLU)
         else:
             raise ValueError(f"Unsupported architecture: {architecture}. Choose 'CNN', 'ResNet' or 'MLP'.")
@@ -94,13 +94,13 @@ class Encoder(nn.Module):
             hidden, cell = self.memory_module(x, hidden)
             # hidden = self.memory_norm(hidden)
             # cell = self.memory_norm(cell)
-            embedding = hidden
+            embedding = hidden + x
             memory = torch.cat((hidden, cell), dim=1)
         elif 'GRU' in self.architecture:
             hidden = torch.zeros_like(memory)
             hidden = self.memory_module(x, hidden)
             # hidden = self.memory_norm(hidden)
-            embedding = hidden
+            embedding = hidden + x
             memory = hidden
         else:
             embedding = x
@@ -114,8 +114,8 @@ class Encoder(nn.Module):
         return embedding, memory
 
     def log(self, logger, step):
-        for k, v in self.outputs.items():
-            logger.log_histogram(f'train_encoder/{k}_hist', v, step)
+        # for k, v in self.outputs.items():
+        #     logger.log_histogram(f'train_encoder/{k}_hist', v, step)
 
         if 'CNN' in self.architecture or 'ResNet' in self.architecture:
             for l, n in enumerate(self.cnn):
@@ -124,6 +124,7 @@ class Encoder(nn.Module):
         else:
             for l, n in enumerate(self.mlp):
                 if type(n) == nn.Linear:
+                    # print(f'Logging MLP layer {l} with name {n} at step {step}')
                     logger.log_param(f'train_encoder/fc{l}', n, step)
 
         if 'LSTM' in self.architecture or 'GRU' in self.architecture:

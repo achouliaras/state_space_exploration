@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from minigrid.core.mission import MissionSpace
 from minigrid.core.roomgrid import RoomGrid
+from typing import Any, Iterable, SupportsFloat, TypeVar
+from gymnasium.core import ActType, ObsType
+import numpy as np
 
+def manhattan_distance(pos1, pos2):
+    return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
 
 class PickupKeyEnv(RoomGrid):
     """
@@ -85,6 +90,8 @@ class PickupKeyEnv(RoomGrid):
 
         self.key = key
         self.door = door
+        self.min_dist_to_point = manhattan_distance(self.agent_pos, self.key.cur_pos)
+        self.max_dist = self.min_dist_to_point
         self.mission = "pick up the key"
 
     def _penalty(self) -> float:
@@ -94,15 +101,31 @@ class PickupKeyEnv(RoomGrid):
         return - 0.8 * (1 / self.max_steps)
     
     def step(self, action):
+        # reward = self._penalty()
+        # terminated = False
+        # if np.array_equal(self.front_pos, self.key.cur_pos) and action != self.actions.pickup:
+        #     # If the agent is at the key position and not picking it up, it is a failure
+        #     reward += -0.2
         obs, reward, terminated, truncated, info = super().step(action)
-        
         info["true_reward"] = 0
-        reward = self._penalty()
+        # reward += self.reward_model()
 
         if action == self.actions.pickup:
             if self.carrying and self.carrying == self.key:
-                reward = 1 
+                reward = self._reward() 
                 terminated = True
                 info["true_reward"] = self._reward()
         
         return obs, reward, terminated, truncated, info
+    
+    def reward_model(self):
+        """
+        Compute the reward to be given
+        """
+        reward = self._penalty()
+
+        dist = manhattan_distance(self.agent_pos, self.key.cur_pos)
+        if dist < self.min_dist_to_point:
+            self.min_dist_to_point = dist
+            reward += -5*self._penalty() * (1 - (dist/(1+dist)))
+        return reward
